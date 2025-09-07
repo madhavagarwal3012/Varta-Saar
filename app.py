@@ -569,6 +569,14 @@ with tab_upload:
                 os.remove(audio_path)
 
 # --- YouTube Tab ---
+import streamlit as st
+import tempfile
+import yt_dlp
+import os
+import subprocess
+
+# ... (the rest of your app.py code) ...
+
 with tab_youtube:
     st.subheader("YouTube URL")
     youtube_url = st.text_input("YouTube Video URL")
@@ -584,11 +592,10 @@ with tab_youtube:
         video_path = None
         audio_path = None
         try:
-            # 1. Download the raw video file
-            # Use a unique temporary file path to avoid conflicts
+            # 1. Download the video as a single, combined stream
             video_path = tempfile.mktemp(suffix=".mp4") 
             ydl_opts = {
-                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                'format': 'best[ext=mp4]', # Request a single, best quality MP4 stream
                 'outtmpl': video_path,
                 'noplaylist': True,
                 'ignoreerrors': True,
