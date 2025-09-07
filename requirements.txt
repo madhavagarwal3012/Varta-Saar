@@ -1,8 +1,14 @@
 streamlit
 openai
-bertopic
 google-generativeai
+bertopic
 scikit-learn
 requests
 yt-dlp
-moviepy 
+numpy
+decorator
+tqdm
+imageio
+imageio-ffmpeg
+Pillow
+proglog
