@@ -12,3 +12,5 @@ imageio
 imageio-ffmpeg
 Pillow
 proglog
+imageio==2.28.1
+imageio-ffmpeg==0.4.8
