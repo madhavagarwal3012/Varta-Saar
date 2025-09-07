@@ -8,6 +8,7 @@ import base64
 from pathlib import Path
 import requests
 import yt_dlp
+import pydub
 from openai import OpenAI
 from bertopic import BERTopic
 import google.generativeai as genai
@@ -582,3 +583,4 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
