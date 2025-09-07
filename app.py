@@ -567,7 +567,7 @@ with tab_youtube:
         if not youtube_url or not meeting_topic_yt:
             st.error("Please provide both a YouTube URL and a meeting topic.")
             st.stop()
-
+        
         st.info("Downloading and processing audio from YouTube video...")
         temp_file_path = None
         try:
@@ -589,7 +589,7 @@ with tab_youtube:
                     os.remove(temp_file_path)
                 except Exception as e:
                     st.warning(f"Failed to remove temporary file: {e}")
-
+        
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
 # =========================================================================
