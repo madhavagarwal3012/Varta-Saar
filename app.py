@@ -555,7 +555,7 @@ with tab_youtube:
         if not youtube_url or not meeting_topic_yt:
             st.error("Please provide both a YouTube URL and a meeting topic.")
             st.stop()
-
+    
         st.info("Downloading and processing audio from YouTube video...")
         temp_file_path = None
         try:
@@ -563,7 +563,7 @@ with tab_youtube:
                 temp_file_path = tmp_file.name
                 ydl_opts = {
                     'format': 'bestaudio/best',
-                    'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
+                    'postprocessors': [{'key': 'FFmpegExtractAudio'}],
                     'outtmpl': temp_file_path,
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
