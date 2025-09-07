@@ -583,33 +583,26 @@ with tab_youtube:
         st.info("Downloading and processing audio from YouTube video...")
         audio_path = None
         try:
-            # yt-dlp options to download only audio and convert to mp3
             ydl_opts = {
                 'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'outtmpl': '%(id)s.%(ext)s', # Use a simpler filename template
-                'noplaylist': True,
-                'ignoreerrors': True,
+                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
+                'outtmpl': '%(id)s.%(ext)s',
             }
-            
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(youtube_url, download=True)
                 audio_path = ydl.prepare_filename(info)
 
-            run_full_pipeline(audio_path, meeting_topic_yt)
+            if os.path.exists(audio_path):
+                run_full_pipeline(audio_path, meeting_topic_yt)
+            else:
+                st.error("Temporary audio file was not created correctly.")
+                st.stop()
 
         except Exception as e:
             st.error(f"Failed to download or process YouTube video: {e}")
         finally:
             if audio_path and os.path.exists(audio_path):
-                try:
-                    os.remove(audio_path)
-                except Exception as e:
-                    st.warning(f"Failed to remove temporary file: {e}")
+                os.remove(audio_path)
         
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
