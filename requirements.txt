@@ -4,7 +4,6 @@ google-generativeai
 bertopic
 scikit-learn
 requests
-yt-dlp --upgrade
+yt-dlp
+pydub
 xhtml2pdf
-
-
