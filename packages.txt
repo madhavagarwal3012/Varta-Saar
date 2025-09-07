@@ -2,3 +2,4 @@ libxml2-dev
 libxslt1-dev
 libffi-dev
 python3-dev
+ffmpeg
