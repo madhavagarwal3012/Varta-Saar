@@ -5,3 +5,4 @@ bertopic
 scikit-learn
 requests
 yt-dlp
+xhtml2pdf
