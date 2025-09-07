@@ -584,32 +584,48 @@ with tab_youtube:
         video_path = None
         audio_path = None
         try:
-            # This is the simpler configuration
+            # 1. Download the raw video file
+            video_path = tempfile.mktemp(suffix=".mp4") 
             ydl_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': tempfile.mktemp(suffix='%(ext)s'),
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
+                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                'outtmpl': video_path,
                 'noplaylist': True,
                 'ignoreerrors': True,
             }
-            
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(youtube_url, download=True)
-                audio_path = ydl.prepare_filename(info)
+                ydl.download([youtube_url])
 
-            if not os.path.exists(audio_path):
-                st.error("Audio download failed.")
+            if not os.path.exists(video_path):
+                st.error("Video download failed.")
                 st.stop()
 
-            run_full_pipeline(audio_path, meeting_topic_yt)
+            st.info("Extracting audio from the video...")
+            # 2. Use a direct FFmpeg subprocess call to extract the audio
+            audio_path = tempfile.mktemp(suffix=".mp3")
+            
+            command = [
+                'ffmpeg',
+                '-i', video_path,
+                '-vn', # no video
+                '-q:a', '0', # best audio quality
+                audio_path
+            ]
+            
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            
+            if os.path.exists(audio_path):
+                run_full_pipeline(audio_path, meeting_topic_yt)
+            else:
+                st.error("Audio extraction failed.")
+                st.stop()
 
+        except subprocess.CalledProcessError as e:
+            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
         except Exception as e:
-            st.error(f"Failed to download or process YouTube video: {e}")
+            st.error(f"An unexpected error occurred: {e}")
         finally:
+            if video_path and os.path.exists(video_path):
+                os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
         
