@@ -1,4 +1,7 @@
-pyaudioob
-pydub
-av
-
+streamlit
+openai
+google-generativeai
+bertopic
+scikit-learn
+requests
+yt-dlp
