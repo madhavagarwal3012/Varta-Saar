@@ -568,15 +568,7 @@ with tab_upload:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
 
-# --- YouTube Tab ---
-import streamlit as st
-import tempfile
-import yt_dlp
-import os
-import subprocess
-
-# ... (the rest of your app.py code) ...
-
+# --- YouTube URL Tab ---
 with tab_youtube:
     st.subheader("YouTube URL")
     youtube_url = st.text_input("YouTube Video URL")
@@ -592,10 +584,9 @@ with tab_youtube:
         video_path = None
         audio_path = None
         try:
-            # 1. Download the video as a single, combined stream
-            video_path = tempfile.mktemp(suffix=".mp4") 
+            video_path = tempfile.mktemp(suffix=".mp4")
             ydl_opts = {
-                'format': 'best[ext=mp4]', # Request a single, best quality MP4 stream
+                'format': 'best[ext=mp4]',
                 'outtmpl': video_path,
                 'noplaylist': True,
                 'ignoreerrors': True,
@@ -608,14 +599,13 @@ with tab_youtube:
                 st.stop()
 
             st.info("Extracting audio from the video...")
-            # 2. Use a direct FFmpeg subprocess call to extract the audio
             audio_path = tempfile.mktemp(suffix=".mp3")
             
             command = [
                 'ffmpeg',
                 '-i', video_path,
-                '-vn', # no video
-                '-q:a', '0', # best audio quality
+                '-vn',
+                '-q:a', '0',
                 audio_path
             ]
             
