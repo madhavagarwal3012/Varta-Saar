@@ -580,30 +580,54 @@ with tab_youtube:
             st.error("Please provide both a YouTube URL and a meeting topic.")
             st.stop()
         
-        st.info("Analyzing YouTube video...")
-        
-        # Use the YouTube QA tool to get the transcript
+        st.info("Downloading YouTube video...")
+        video_path = None
+        audio_path = None
         try:
-            qa_response = youtube.question_answer(question="Provide the full transcript of the video.", url=youtube_url)
-            transcript_text = qa_response
-            
-            if not transcript_text:
-                st.error("Could not retrieve transcript from the video.")
+            # 1. Download the raw video file
+            video_path = tempfile.mktemp(suffix=".mp4") 
+            ydl_opts = {
+                'format': 'best[ext=mp4]', # Request a single, best quality MP4 stream
+                'outtmpl': video_path,
+                'noplaylist': True,
+                'ignoreerrors': True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
+
+            if not os.path.exists(video_path):
+                st.error("Video download failed.")
                 st.stop()
 
-            # Create a temporary file to store the transcript text
-            with tempfile.NamedTemporaryFile(mode='w', suffix=".txt", delete=False) as tmp_file:
-                tmp_file.write(transcript_text)
-                transcript_path = tmp_file.name
+            st.info("Extracting audio from the video...")
+            # 2. Use a direct FFmpeg subprocess call to extract the audio
+            audio_path = tempfile.mktemp(suffix=".mp3")
             
-            # The rest of the pipeline can now process the text file
-            run_full_pipeline(transcript_path, meeting_topic_yt)
+            command = [
+                'ffmpeg',
+                '-i', video_path,
+                '-vn', # no video
+                '-q:a', '0', # best audio quality
+                audio_path
+            ]
+            
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            
+            if os.path.exists(audio_path):
+                run_full_pipeline(audio_path, meeting_topic_yt)
+            else:
+                st.error("Audio extraction failed.")
+                st.stop()
 
+        except subprocess.CalledProcessError as e:
+            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
         except Exception as e:
-            st.error(f"An unexpected error occurred during YouTube analysis: {e}")
+            st.error(f"An unexpected error occurred: {e}")
         finally:
-            if 'transcript_path' in locals() and os.path.exists(transcript_path):
-                os.remove(transcript_path)
+            if video_path and os.path.exists(video_path):
+                os.remove(video_path)
+            if audio_path and os.path.exists(audio_path):
+                os.remove(audio_path)
         
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
