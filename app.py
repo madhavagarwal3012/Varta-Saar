@@ -583,36 +583,27 @@ with tab_youtube:
         st.info("Downloading YouTube video...")
         video_path = None
         audio_path = None
-        temp_cookies_path = None
-        try:
-            # Get cookies from Streamlit secrets
-            cookies_content = st.secrets["YOUTUBE_COOKIES"]
-            
-            # Write the cookies to a temporary file
-            with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp_cookies_file:
-                temp_cookies_file.write(cookies_content)
-                temp_cookies_path = temp_cookies_file.name
 
-            # 1. Download the raw video file
+        try:
+            # 1. Download the raw video file without using cookies
             video_path = tempfile.mktemp(suffix=".mp4")
             ydl_opts = {
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': video_path,
                 'noplaylist': True,
                 'ignoreerrors': True,
-                'cookiefile': temp_cookies_path, # Use the path to the temporary file
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([youtube_url])
 
             if not os.path.exists(video_path):
-                st.error("Video download failed.")
+                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue.")
                 st.stop()
 
             st.info("Extracting audio from the video...")
             # 2. Use a direct FFmpeg subprocess call to extract the audio
             audio_path = tempfile.mktemp(suffix=".mp3")
-            
+
             command = [
                 'ffmpeg',
                 '-i', video_path,
@@ -620,9 +611,9 @@ with tab_youtube:
                 '-q:a', '0',
                 audio_path
             ]
-            
+
             subprocess.run(command, check=True, capture_output=True, text=True)
-            
+
             if os.path.exists(audio_path):
                 run_full_pipeline(audio_path, meeting_topic_yt)
             else:
@@ -631,8 +622,6 @@ with tab_youtube:
 
         except subprocess.CalledProcessError as e:
             st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
-        except KeyError:
-            st.error("Cookies are missing from your app's secrets. Please add them.")
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
         finally:
@@ -640,8 +629,6 @@ with tab_youtube:
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
-            if temp_cookies_path and os.path.exists(temp_cookies_path):
-                os.remove(temp_cookies_path)
         
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
