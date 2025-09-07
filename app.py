@@ -6,6 +6,7 @@ import tempfile
 import json
 import base64
 from pathlib import Path
+from moviepy.editor import VideoFileClip
 import requests
 import yt_dlp
 from openai import OpenAI
@@ -555,7 +556,7 @@ with tab_youtube:
         if not youtube_url or not meeting_topic_yt:
             st.error("Please provide both a YouTube URL and a meeting topic.")
             st.stop()
-        
+    
         st.info("Downloading and processing audio from YouTube video...")
         temp_file_path = None
         try:
@@ -563,7 +564,7 @@ with tab_youtube:
                 temp_file_path = tmp_file.name
                 ydl_opts = {
                     'format': 'bestaudio/best',
-                    'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
+                    'postprocessors': [{'key': 'FFmpegExtractAudio'}],
                     'outtmpl': temp_file_path,
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -573,7 +574,6 @@ with tab_youtube:
             st.error(f"Failed to download or process YouTube video: {e}")
         finally:
             if temp_file_path and os.path.exists(temp_file_path):
-                # Ensure the file is closed and then remove it
                 try:
                     os.remove(temp_file_path)
                 except Exception as e:
@@ -585,4 +585,3 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
-
