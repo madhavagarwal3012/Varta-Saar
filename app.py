@@ -583,11 +583,12 @@ with tab_youtube:
         st.info("Downloading and processing audio from YouTube video...")
         temp_file_path = None
         try:
+            # This creates a temporary file on the disk
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
                 temp_file_path = tmp_file.name
                 ydl_opts = {
                     'format': 'bestaudio/best',
-                    'postprocessors': [{'key': 'FFmpegExtractAudio'}],
+                    'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
                     'outtmpl': temp_file_path,
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
