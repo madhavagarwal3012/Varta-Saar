@@ -575,7 +575,7 @@ with tab_youtube:
                 temp_file_path = tmp_file.name
                 ydl_opts = {
                     'format': 'bestaudio/best',
-                    'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
+                    'postprocessors': [{'key': 'FFmpegExtractAudio'}],
                     'outtmpl': temp_file_path,
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
