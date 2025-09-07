@@ -6,7 +6,6 @@ import tempfile
 import json
 import base64
 from pathlib import Path
-from moviepy.editor import VideoFileClip
 import requests
 import yt_dlp
 from openai import OpenAI
@@ -585,3 +584,4 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
