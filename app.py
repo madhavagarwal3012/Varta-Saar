@@ -6,7 +6,6 @@ import tempfile
 import json
 import base64
 from pathlib import Path
-from moviepy.editor import VideoFileClip
 import requests
 import yt_dlp
 from openai import OpenAI
