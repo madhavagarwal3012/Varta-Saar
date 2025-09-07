@@ -1,16 +1,1 @@
-streamlit
-openai
-google-generativeai
-bertopic
-scikit-learn
-requests
-yt-dlp
-numpy
-decorator
-tqdm
-imageio==2.28.1
-imageio-ffmpeg==0.4.8
-Pillow
-proglog
-
-
+pydub
