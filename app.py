@@ -8,7 +8,7 @@ import base64
 from pathlib import Path
 import requests
 import yt_dlp
-import pydub
+import subprocess
 from openai import OpenAI
 from bertopic import BERTopic
 import google.generativeai as genai
@@ -517,22 +517,35 @@ with tab_upload:
             st.error("Please provide both a file and a meeting topic.")
             st.stop()
         
-        # Use a temporary file to save the uploaded content
         with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
             tmp_file.write(uploaded_file.read())
             audio_path = tmp_file.name
         
-        # Check if the file is a video and needs audio extraction
         if audio_path.endswith((".mp4", ".mov")):
+            st.info("Extracting audio from video using FFmpeg...")
+            output_audio_path = tempfile.mktemp(suffix=".mp3")
             try:
-                # Use pydub to extract the audio
-                audio = AudioSegment.from_file(audio_path)
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audio_tmp:
-                    audio.export(audio_tmp.name, format="mp3")
-                os.remove(audio_path) # Clean up the original video file
-                audio_path = audio_tmp.name # Update the path to the new audio file
-            except Exception as e:
-                st.error(f"Failed to extract audio from video: {e}")
+                # Direct subprocess call to ffmpeg
+                command = [
+                    'ffmpeg',
+                    '-i', audio_path,
+                    '-vn', # no video
+                    '-acodec', 'libmp3lame', # use libmp3lame for MP3
+                    '-q:a', '2', # audio quality
+                    output_audio_path
+                ]
+                subprocess.run(command, check=True, capture_output=True, text=True)
+                os.remove(audio_path) # Clean up original video file
+                audio_path = output_audio_path
+            except subprocess.CalledProcessError as e:
+                st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
+                if os.path.exists(audio_path):
+                    os.remove(audio_path)
+                if os.path.exists(output_audio_path):
+                    os.remove(output_audio_path)
+                st.stop()
+            except FileNotFoundError:
+                st.error("FFmpeg not found. Please ensure it is in your packages.txt file.")
                 if os.path.exists(audio_path):
                     os.remove(audio_path)
                 st.stop()
@@ -583,4 +596,3 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
-
