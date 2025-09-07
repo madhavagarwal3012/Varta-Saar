@@ -1,2 +1,4 @@
+pyaudioob
 pydub
 av
+
