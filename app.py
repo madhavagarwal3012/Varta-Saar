@@ -592,12 +592,15 @@ with tab_youtube:
                 'outtmpl': video_path,
                 'noplaylist': True,
                 'ignoreerrors': True,
+                'retries': 5, # Added retries
+                'fragment-retries': 5, # Added fragment retries
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([youtube_url])
 
             if not os.path.exists(video_path):
-                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue.")
+                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue. Please try uploading the file manually.")
                 st.stop()
 
             st.info("Extracting audio from the video...")
