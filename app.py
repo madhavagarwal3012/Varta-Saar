@@ -26,7 +26,10 @@ try:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
     PERPLEXITY_API_KEY = st.secrets["PERPLEXITY_API_KEY"]
-    ASSEMBLYAI_API_KEY = st.secrets["ASSEMBLYAI_API_KEY"]
+    ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY") or st.secrets["ASSEMBLYAI_API_KEY"]
+    if not ASSEMBLYAI_API_KEY:
+        st.error("AssemblyAI API key not found. Please set it in your Streamlit secrets.")
+        st.stop()
 
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
     genai.configure(api_key=GEMINI_API_KEY)
@@ -371,10 +374,19 @@ def run_full_pipeline(file_path, meeting_topic):
     st.header("Detailed Analysis 📊")
 
     st.subheader("1. Transcription and Analysis")
-    with st.spinner("Uploading file and transcribing audio..."):
-        audio_url = get_audio_url(file_path)
-        transcript_id = transcribe_audio(audio_url)
-        transcript = get_transcription_result(transcript_id)
+    try:
+        with st.spinner("Uploading file and transcribing audio..."):
+            audio_url = get_audio_url(file_path)
+            transcript_id = transcribe_audio(audio_url)
+            transcript = get_transcription_result(transcript_id)
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Failed to transcribe audio: HTTP Error {e.response.status_code}")
+        st.error(f"Error message: {e.response.text}")
+        return None # Stop the pipeline on error
+
+    except Exception as e:
+        st.error(f"An unexpected error occurred during transcription: {e}")
+        return None # Stop the pipeline on error
 
     if transcript:
         st.success("Transcription complete!")
