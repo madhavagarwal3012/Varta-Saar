@@ -1,2 +1,8 @@
 streamlit
-moviepy
+openai
+bertopic
+google-generativeai
+scikit-learn
+requests
+yt-dlp
+moviepy 
