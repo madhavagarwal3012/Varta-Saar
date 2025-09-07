@@ -4,6 +4,7 @@ google-generativeai
 bertopic
 scikit-learn
 requests
-yt-dlp
+yt-dlp --upgrade
 xhtml2pdf
+
 
