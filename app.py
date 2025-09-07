@@ -581,30 +581,30 @@ with tab_youtube:
             st.stop()
         
         st.info("Downloading and processing audio from YouTube video...")
-        audio_path = None
+        
+        temp_file_path = None # Initialize the variable here
+        
         try:
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-                'outtmpl': temp_file_path,
-                'noplaylist': True,
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(youtube_url, download=True)
-                audio_path = ydl.prepare_filename(info)
-
-            if os.path.exists(audio_path):
-                run_full_pipeline(audio_path, meeting_topic_yt)
-            else:
-                st.error("Temporary audio file was not created correctly.")
-                st.stop()
-
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+                temp_file_path = tmp_file.name
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}],
+                    'outtmpl': temp_file_path,
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([youtube_url])
+            
+            run_full_pipeline(temp_file_path, meeting_topic_yt)
+            
         except Exception as e:
             st.error(f"Failed to download or process YouTube video: {e}")
         finally:
-            if audio_path and os.path.exists(audio_path):
-                os.remove(audio_path)
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                except Exception as e:
+                    st.warning(f"Failed to remove temporary file: {e}")
         
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
