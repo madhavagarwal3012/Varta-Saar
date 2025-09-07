@@ -1,0 +1,10 @@
+streamlit
+openai
+google-generativeai
+python-docx
+requests
+bertopic
+scikit-learn
+sentence-transformers
+youtube-dlp
+moviepy
