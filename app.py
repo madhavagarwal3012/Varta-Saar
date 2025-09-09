@@ -569,12 +569,6 @@ with tab_upload:
             f.write(uploaded_file.getbuffer())
 
         st.info("Extracting audio from the video...")
-        
-        # Determine the path for the FFmpeg executable
-        if platform.system() == 'Windows':
-            ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg.exe')
-        else:
-            ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg')
 
         # Run FFmpeg to extract audio
         audio_path = tempfile.mktemp(suffix=".mp3")
@@ -679,3 +673,4 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
