@@ -14,6 +14,7 @@ from bertopic import BERTopic
 import google.generativeai as genai
 from sklearn.feature_extraction.text import CountVectorizer
 from xhtml2pdf import pisa
+from pydub import AudioSegment # ADDED: Missing import for video processing
 
 # =========================================================================
 # === STEP 1: CONFIGURATION AND API CLIENT SETUP (Backend Handling) =======
@@ -22,14 +23,12 @@ st.set_page_config(
     page_title="Varta-Saar: The Ultimate AI Meeting Assistant",
     page_icon="🤖",
 )
+
 try:
     OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
     PERPLEXITY_API_KEY = st.secrets["PERPLEXITY_API_KEY"]
-    ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY") or st.secrets["ASSEMBLYAI_API_KEY"]
-    if not ASSEMBLYAI_API_KEY:
-        st.error("AssemblyAI API key not found. Please set it in your Streamlit secrets.")
-        st.stop()
+    ASSEMBLYAI_API_KEY = st.secrets["ASSEMBLYAI_API_KEY"]
 
     openai_client = OpenAI(api_key=OPENAI_API_KEY)
     genai.configure(api_key=GEMINI_API_KEY)
@@ -74,13 +73,15 @@ def read_file(file_path, chunk_size):
 
 def transcribe_audio(audio_url):
     """
-    Sends an audio URL for transcription.
+    Sends an audio URL for transcription with language detection enabled.
+    (This is the corrected, merged function)
     """
     headers = {'authorization': ASSEMBLYAI_API_KEY, 'content-type': 'application/json'}
     data = {
         "audio_url": audio_url,
         "speaker_labels": True,
         "sentiment_analysis": True,
+        "language_detection": True
     }
     response = requests.post(
         'https://api.assemblyai.com/v2/transcript',
@@ -339,28 +340,6 @@ def generate_pdf_report(report_data):
 
         return f'<a href="data:application/pdf;base64,{b64_pdf_fallback}" download="simplified_report.pdf">Download Simplified Report as PDF</a>'
 
-def transcribe_audio(audio_url):
-    """
-    Sends an audio URL for transcription with language detection enabled.
-    """
-    headers = {'authorization': ASSEMBLYAI_API_KEY, 'content-type': 'application/json'}
-    data = {
-        "audio_url": audio_url,
-        "speaker_labels": True,
-        "sentiment_analysis": True,
-        "language_detection": True  # NEW: Enable automatic language detection
-    }
-    response = requests.post(
-        'https://api.assemblyai.com/v2/transcript',
-        headers=headers,
-        json=data
-    )
-    if response.status_code == 200:
-        return response.json()['id']
-    else:
-        st.error(f"Failed to submit transcription job: {response.status_code}")
-        st.json(response.json())
-        st.stop()
 
 # =========================================================================
 # === STEP 3: MAIN APPLICATION PIPELINE ===================================
@@ -379,24 +358,18 @@ def run_full_pipeline(file_path, meeting_topic):
             audio_url = get_audio_url(file_path)
             transcript_id = transcribe_audio(audio_url)
             transcript_dict = get_transcription_result(transcript_id)
-            print(transcript_dict) # Keep this for debugging
 
-        # The following block must be indented to be part of the 'try' block,
-        # but after the 'with st.spinner' block has finished.
         if 'text' in transcript_dict and transcript_dict['text']:
             st.success("Transcription complete!")
             
-            # Use transcript_dict to get all your data
             raw_transcript = transcript_dict.get('text', '')
             
-            # Correct the language detection, as it was using the wrong variable.
             detected_language = transcript_dict.get('language_code', 'en')
             st.info(f"Detected language: **{detected_language}**")
 
             if detected_language != 'en':
                 with st.spinner(f"Translating the transcript from {detected_language} to English..."):
                     try:
-                        # Use a powerful LLM to perform the translation
                         translation_response = google_client.generate_content(
                             f"Translate the following text into English:\n\n{raw_transcript}"
                         )
@@ -407,7 +380,7 @@ def run_full_pipeline(file_path, meeting_topic):
 
             if not raw_transcript or len(raw_transcript.strip()) == 0:
                 st.error("The transcription failed or returned an empty transcript. Please check your API key and try a video with clear speech.")
-                return # Use return, not st.stop() here
+                return 
 
             # Speaker Diarization with Timestamps
             diarization_output = ""
@@ -446,36 +419,28 @@ def run_full_pipeline(file_path, meeting_topic):
 
             # Key Topics
             st.markdown("### Key Topics (powered by Topic Modeling)")
-            # Safely get the 'utterances' list from the transcription dictionary.
             utterances_for_topics = transcript_dict.get('utterances')
 
-            # Check if the list of utterances exists and is not empty.
             if utterances_for_topics:
-                # Use a list comprehension to get the text from each utterance.
                 docs_for_topic_modeling = [utterance['text'] for utterance in utterances_for_topics]
 
-                # Check if there is actual text to analyze.
                 if docs_for_topic_modeling:
                     try:
-                        # Perform topic modeling and display the results.
                         topics = perform_topic_modeling(docs_for_topic_modeling)
                         st.json(topics)
                     except Exception as e:
-                        # Catch any errors from the topic modeling function itself.
                         st.warning("Topic modeling could not be completed. The final report will be generated without this section.")
                         topics = [{"topic": "Topic modeling failed", "count": 0, "keywords": ""}]
                 else:
-                    # Fallback if the utterances list contains no text.
                     topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
                     st.warning("Not enough data to perform topic modeling. The utterances list was empty.")
             else:
-                # Fallback if no utterances list was returned at all.
                 topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
                 st.warning("No speaker utterances were returned. This may be due to a transcription failure or very short audio.")
 
-            # This ensures 'topics' is always defined for the final report.
             if 'topics' not in locals():
                 topics = [{"topic": "Not available", "count": 0, "keywords": ""}]
+
             # Summarization
             st.subheader("2. AI-Powered Summaries")
             with st.spinner("Generating summaries with multiple AI models..."):
@@ -525,15 +490,16 @@ def run_full_pipeline(file_path, meeting_topic):
             st.markdown(generate_pdf_report(report_data), unsafe_allow_html=True)
         else:
             st.error("Transcription failed to return a valid result. The full pipeline cannot be executed.")
-            return None # Use return here
+            return
             
     except requests.exceptions.HTTPError as e:
         st.error(f"Failed to transcribe audio: HTTP Error {e.response.status_code}")
         st.error(f"Error message: {e.response.text}")
-        return None
+        return
     except Exception as e:
         st.error(f"An unexpected error occurred during transcription: {e}")
-        return None 
+        return
+
 # =========================================================================
 # === STEP 4: STREAMLIT UI AND LOGIC ======================================
 # =========================================================================
@@ -620,8 +586,11 @@ with tab_youtube:
             st.info("Extracting audio from the video...")
             audio_path = tempfile.mktemp(suffix=".mp3")
             
+            # Use relative path to FFmpeg binary to ensure it works on all systems
+            ffmpeg_path = os.path.join(Path(__file__).parent, 'bin', 'ffmpeg.exe')
+            
             command = [
-                'ffmpeg',
+                ffmpeg_path,
                 '-i', video_path,
                 '-vn',
                 '-q:a', '0',
