@@ -10,6 +10,7 @@ import requests
 import yt_dlp
 import subprocess
 import pytube
+import pydub
 from openai import OpenAI
 from bertopic import BERTopic
 import google.generativeai as genai
@@ -608,6 +609,7 @@ with st.container():
             st.stop()
 
         audio_path = None
+        video_path = None
 
         try:
             # Check if the URL is a YouTube video
@@ -620,12 +622,11 @@ with st.container():
                 video_path = tempfile.mktemp(suffix=".mp4")
                 
                 stream.download(output_path=os.path.dirname(video_path), filename=os.path.basename(video_path))
-
-                if not os.path.exists(video_path):
-                    st.error("Video download failed. The video may be private, age-restricted, or unavailable.")
+                
+                if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
+                    st.error("Video download failed or resulted in an empty file.")
                     st.stop()
                 
-                # Use FFmpeg to extract audio
                 st.info("Extracting audio from the video...")
                 audio_path = tempfile.mktemp(suffix=".mp3")
                 ffmpeg_path = os.path.join(Path(__file__).parent, 'bin', 'ffmpeg.exe')
@@ -643,7 +644,6 @@ with st.container():
             else:
                 st.info("Direct audio URL detected. Downloading file...")
                 
-                # Use requests to download the audio file directly
                 response = requests.get(input_url, stream=True)
                 response.raise_for_status()
                 
@@ -652,18 +652,24 @@ with st.container():
                 with open(audio_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-            
-            # Check if the downloaded audio file is valid before proceeding
-            if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
+                
+            # --- New File Integrity Check ---
+            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
+                st.error("Download or extraction failed. The resulting audio file is empty.")
+                st.stop()
+                
+            try:
+                # This will raise a CouldntDecodeError if the file is corrupt or invalid
+                AudioSegment.from_file(audio_path)
+                st.success("File integrity check passed! Proceeding with transcription.")
                 run_full_pipeline(audio_path, meeting_topic_url)
-            else:
-                st.error("Download failed or the file is empty. Please check the URL.")
+            except CouldntDecodeError:
+                st.error("The downloaded or extracted audio file is corrupted or in an invalid format. Cannot proceed with transcription.")
                 st.stop()
 
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
         finally:
-            # Clean up temporary files
             if 'video_path' in locals() and os.path.exists(video_path):
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
@@ -675,6 +681,7 @@ with st.container():
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
