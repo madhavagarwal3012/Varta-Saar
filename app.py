@@ -597,65 +597,43 @@ with tab_upload:
 
 # --- YouTube URL Tab ---
 with tab_youtube:
-    st.subheader("YouTube URL")
-    youtube_url = st.text_input("YouTube Video URL")
-    st.subheader("Meeting Topic (YouTube)")
-    meeting_topic_yt = st.text_input("Enter the main topic of the meeting for the YouTube video", placeholder="e.g., Apple WWDC 2024 Keynote")
+    st.subheader("Download from URL")
+    audio_url = st.text_input("Enter URL to an audio file (.mp3, .m4a)")
+    st.subheader("Meeting Topic")
+    meeting_topic_url = st.text_input("Enter the main topic of the meeting", placeholder="e.g., Project Kick-off Meeting")
 
-    if st.button("Generate Report 🚀", key="youtube_button"):
-        if not youtube_url or not meeting_topic_yt:
-            st.error("Please provide both a YouTube URL and a meeting topic.")
+    if st.button("Generate Report 🚀", key="url_button"):
+        if not audio_url or not meeting_topic_url:
+            st.error("Please provide both a valid URL and a meeting topic.")
             st.stop()
 
-        st.info("Downloading YouTube video...")
-        video_path = None
         audio_path = None
-        
+
         try:
-            # 1. Download the raw video file using pytube
-            yt = pytube.YouTube(youtube_url)
-            
-            # Get the best available stream (video and audio combined)
-            stream = yt.streams.get_highest_resolution()
-            
-            # Create a temporary file path for the video
-            video_path = tempfile.mktemp(suffix=".mp4")
-            
-            # Download the video to the temporary path
-            stream.download(output_path=os.path.dirname(video_path), filename=os.path.basename(video_path))
+            st.info("Downloading audio file from URL...")
 
-            if not os.path.exists(video_path):
-                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue.")
-                st.stop()
+            # ADDED: Direct download using requests
+            response = requests.get(audio_url, stream=True)
+            response.raise_for_status() # Raise an exception for bad status codes
 
-            st.info("Extracting audio from the video...")
-            
-            # 2. Use FFmpeg to extract the audio from the video
+            # Create a temporary file to store the downloaded audio
             audio_path = tempfile.mktemp(suffix=".mp3")
 
-            command = [
-                'ffmpeg',
-                '-i', video_path,
-                '-vn',
-                '-q:a', '0',
-                audio_path
-            ]
+            with open(audio_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-            subprocess.run(command, check=True, capture_output=True, text=True)
-
-            if os.path.exists(audio_path):
-                run_full_pipeline(audio_path, meeting_topic_yt)
+            if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
+                run_full_pipeline(audio_path, meeting_topic_url)
             else:
-                st.error("Audio extraction failed.")
+                st.error("Download failed or the file is empty. Please check the URL.")
                 st.stop()
 
-        except subprocess.CalledProcessError as e:
-            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Failed to download the file from the URL: {e}")
         except Exception as e:
-            st.error(f"An unexpected error occurred: {e}")
+            st.error(f"An unexpected error occurred during the download process: {e}")
         finally:
-            if video_path and os.path.exists(video_path):
-                os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
 
@@ -665,6 +643,7 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
