@@ -596,44 +596,75 @@ with tab_upload:
                 os.remove(audio_path)
 
 # --- YouTube URL Tab ---
-with tab_youtube:
-    st.subheader("Download from URL")
-    audio_url = st.text_input("Enter URL to an audio file (.mp3, .m4a)")
-    st.subheader("Meeting Topic")
-    meeting_topic_url = st.text_input("Enter the main topic of the meeting", placeholder="e.g., Project Kick-off Meeting")
+with st.container():
+    st.subheader("URL Analysis 🔗")
+    input_url = st.text_input("Enter a YouTube video URL or a direct audio URL (.mp3, .m4a)")
+    meeting_topic_url = st.text_input("Enter the main topic of the content", placeholder="e.g., Apple WWDC 2024 Keynote")
 
     if st.button("Generate Report 🚀", key="url_button"):
-        if not audio_url or not meeting_topic_url:
-            st.error("Please provide both a valid URL and a meeting topic.")
+        if not input_url or not meeting_topic_url:
+            st.error("Please provide a valid URL and a meeting topic.")
             st.stop()
 
         audio_path = None
 
         try:
-            st.info("Downloading audio file from URL...")
+            # Check if the URL is a YouTube video
+            if "youtube.com" in input_url or "youtu.be" in input_url:
+                st.info("YouTube URL detected. Downloading video...")
+                
+                # Use pytube to download video
+                yt = pytube.YouTube(input_url)
+                stream = yt.streams.get_highest_resolution()
+                video_path = tempfile.mktemp(suffix=".mp4")
+                
+                stream.download(output_path=os.path.dirname(video_path), filename=os.path.basename(video_path))
 
-            # ADDED: Direct download using requests
-            response = requests.get(audio_url, stream=True)
-            response.raise_for_status() # Raise an exception for bad status codes
+                if not os.path.exists(video_path):
+                    st.error("Video download failed. The video may be private, age-restricted, or unavailable.")
+                    st.stop()
+                
+                # Use FFmpeg to extract audio
+                st.info("Extracting audio from the video...")
+                audio_path = tempfile.mktemp(suffix=".mp3")
+                ffmpeg_path = os.path.join(Path(__file__).parent, 'bin', 'ffmpeg.exe')
 
-            # Create a temporary file to store the downloaded audio
-            audio_path = tempfile.mktemp(suffix=".mp3")
+                command = [
+                    ffmpeg_path,
+                    '-i', video_path,
+                    '-vn',
+                    '-q:a', '0',
+                    audio_path
+                ]
+                subprocess.run(command, check=True, capture_output=True, text=True)
 
-            with open(audio_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
+            # Otherwise, assume it's a direct audio URL
+            else:
+                st.info("Direct audio URL detected. Downloading file...")
+                
+                # Use requests to download the audio file directly
+                response = requests.get(input_url, stream=True)
+                response.raise_for_status()
+                
+                audio_path = tempfile.mktemp(suffix=".mp3")
+                
+                with open(audio_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+            
+            # Check if the downloaded audio file is valid before proceeding
             if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
                 run_full_pipeline(audio_path, meeting_topic_url)
             else:
                 st.error("Download failed or the file is empty. Please check the URL.")
                 st.stop()
 
-        except requests.exceptions.RequestException as e:
-            st.error(f"Failed to download the file from the URL: {e}")
         except Exception as e:
-            st.error(f"An unexpected error occurred during the download process: {e}")
+            st.error(f"An unexpected error occurred: {e}")
         finally:
+            # Clean up temporary files
+            if 'video_path' in locals() and os.path.exists(video_path):
+                os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
 
@@ -643,6 +674,7 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
