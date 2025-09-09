@@ -597,90 +597,66 @@ with tab_upload:
                 os.remove(audio_path)
 
 # --- YouTube URL Tab ---
-with st.container():
-    st.subheader("URL Analysis 🔗")
-    input_url = st.text_input("Enter a YouTube video URL or a direct audio URL (.mp3, .m4a)")
-    meeting_topic_url = st.text_input("Enter the main topic of the content", placeholder="e.g., Apple WWDC 2024 Keynote")
+with tab_youtube:
+    st.subheader("YouTube URL")
+    youtube_url = st.text_input("YouTube Video URL")
+    st.subheader("Meeting Topic (YouTube)")
+    meeting_topic_yt = st.text_input("Enter the main topic of the meeting for the YouTube video", placeholder="e.g., Apple WWDC 2024 Keynote")
 
-    if st.button("Generate Report 🚀", key="url_button"):
-        if not input_url or not meeting_topic_url:
-            st.error("Please provide a valid URL and a meeting topic.")
+    if st.button("Generate Report 🚀", key="youtube_button"):
+        if not youtube_url or not meeting_topic_yt:
+            st.error("Please provide both a YouTube URL and a meeting topic.")
             st.stop()
 
-        audio_path = None
+        st.info("Downloading YouTube video...")
         video_path = None
+        audio_path = None
 
         try:
-            # Check if the URL is a YouTube video
-            if "youtube.com" in input_url or "youtu.be" in input_url:
-                st.info("YouTube URL detected. Downloading video...")
-                
-                yt = pytube.YouTube(input_url)
-                stream = yt.streams.get_highest_resolution()
-                video_path = tempfile.mktemp(suffix=".mp4")
-                
-                stream.download(output_path=os.path.dirname(video_path), filename=os.path.basename(video_path))
-                
-                if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
-                    st.error("Video download failed or resulted in an empty file.")
-                    st.stop()
-                
-                st.info("Extracting audio from the video...")
-                audio_path = tempfile.mktemp(suffix=".mp3")
-                ffmpeg_path = os.path.join(Path(__file__).parent, 'bin', 'ffmpeg.exe')
+            # 1. Download the raw video file without using cookies
+            video_path = tempfile.mktemp(suffix=".mp4")
+            ydl_opts = {
+                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                'outtmpl': video_path,
+                'noplaylist': True,
+                'ignoreerrors': True,
+                'retries': 5, # Added retries
+                'fragment-retries': 5, # Added fragment retries
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([youtube_url])
 
-                command = [
-                    ffmpeg_path,
-                    '-i', video_path,
-                    '-vn',
-                    '-q:a', '0',
-                    audio_path
-                ]
-                subprocess.run(command, check=True, capture_output=True, text=True)
-
-            # Assume it's a direct audio URL
-            else:
-                st.info("Direct audio URL detected. Downloading file...")
-                
-                response = requests.get(input_url, stream=True)
-                response.raise_for_status()
-                
-                audio_path = tempfile.mktemp(suffix=".mp3")
-                
-                with open(audio_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-            
-            # --- New File Integrity Check using FFmpeg ---
-            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
-                st.error("Download or extraction failed. The resulting audio file is empty.")
+            if not os.path.exists(video_path):
+                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue. Please try uploading the file manually.")
                 st.stop()
-            
-            st.info("Verifying file integrity...")
-            ffmpeg_path = os.path.join(Path(__file__).parent, 'bin', 'ffmpeg.exe')
-            
-            integrity_check_command = [
-                ffmpeg_path,
-                '-v', 'error',  # Only show error messages
-                '-i', audio_path,
-                '-f', 'null',
-                '-'
+
+            st.info("Extracting audio from the video...")
+            # 2. Use a direct FFmpeg subprocess call to extract the audio
+            audio_path = tempfile.mktemp(suffix=".mp3")
+
+            command = [
+                'ffmpeg',
+                '-i', video_path,
+                '-vn',
+                '-q:a', '0',
+                audio_path
             ]
-            
-            result = subprocess.run(integrity_check_command, capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                st.success("File integrity check passed! Proceeding with transcription.")
-                run_full_pipeline(audio_path, meeting_topic_url)
+
+            subprocess.run(command, check=True, capture_output=True, text=True)
+
+            if os.path.exists(audio_path):
+                run_full_pipeline(audio_path, meeting_topic_yt)
             else:
-                st.error("The downloaded or extracted audio file is corrupted or in an invalid format. Cannot proceed.")
-                st.info(f"FFmpeg Error Log: {result.stderr}")
+                st.error("Audio extraction failed.")
                 st.stop()
-            
+
+        except subprocess.CalledProcessError as e:
+            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
         finally:
-            if 'video_path' in locals() and video_path and os.path.exists(video_path):
+            if video_path and os.path.exists(video_path):
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
@@ -691,6 +667,7 @@ with st.container():
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
