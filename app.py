@@ -573,8 +573,8 @@ with tab_upload:
         # Run FFmpeg to extract audio
         audio_path = tempfile.mktemp(suffix=".mp3")
         command = [
-            ffmpeg_executable,
-            '-i', temp_file_path,
+            'ffmpeg',
+            '-i', video_path,
             '-vn',
             '-q:a', '0',
             audio_path
@@ -636,17 +636,12 @@ with tab_youtube:
             # 2. Use a direct FFmpeg subprocess call to extract the audio
             audio_path = tempfile.mktemp(suffix=".mp3")
             
-            if platform.system() == 'Windows':
-                ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg.exe')
-            else:
-                ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg')
-
             command = [
-                ffmpeg_executable,
-                '-i', video_path,
-                '-vn',
-                '-q:a', '0',
-                audio_path
+            'ffmpeg',
+            '-i', video_path,
+            '-vn',
+            '-q:a', '0',
+            audio_path
             ]
 
             subprocess.run(command, check=True, capture_output=True, text=True)
@@ -673,4 +668,5 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
