@@ -664,4 +664,4 @@ with tab_youtube:
 # =========================================================================
 
 st.markdown("---")
-st.markdown("© Copyright 2025 by Madhav Aga
+st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
