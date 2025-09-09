@@ -1,5 +1,4 @@
 import streamlit as st
-import platform
 import os
 import io
 import time
@@ -545,60 +544,40 @@ st.markdown("---")
 
 tab_upload, tab_youtube = st.tabs(["Upload File", "YouTube URL"])
 with tab_upload:
-    st.subheader("Meeting Topic")
-    meeting_topic = st.text_input("Enter the main topic of the meeting", placeholder="e.g., Q1 Financial Results")
-    st.subheader("Upload Meeting Audio/Video")
+    meeting_topic_upload = st.text_input("Meeting Topic", placeholder="e.g., Q3 Marketing Strategy Review")
     uploaded_file = st.file_uploader(
         "Upload Meeting Audio/Video (.mp3, .m4a, .mp4, .mov)",
-        type=["mp3", "m4a", "mp4", "mov", "m4v"]
+        type=["mp3", "m4a", "mp4", "mov"]
     )
-
-    if st.button("Generate Report 🚀", key="upload_button"):
-        if not uploaded_file or not meeting_topic:
+    if st.button("Generate Report", key="upload_button"):
+        if not uploaded_file or not meeting_topic_upload:
             st.error("Please provide both a file and a meeting topic.")
             st.stop()
-        
-        # Determine the file path
-        file_path = uploaded_file.name
-        
-        # Write the uploaded file to a temporary location
-        st.info("Saving uploaded file to a temporary location...")
-        temp_dir = tempfile.gettempdir()
-        temp_file_path = os.path.join(temp_dir, file_path)
-        with open(temp_file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
-        st.info("Extracting audio from the video...")
-
-        # Run FFmpeg to extract audio
-        audio_path = tempfile.mktemp(suffix=".mp3")
-        command = [
-            'ffmpeg',
-            '-i', video_path,
-            '-vn',
-            '-q:a', '0',
-            audio_path
-        ]
-        
+        audio_path = None
         try:
-            subprocess.run(command, check=True, capture_output=True, text=True)
-
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                audio_path = tmp_file.name
+            file_extension = os.path.splitext(uploaded_file.name)[1].lower()
+            if file_extension in [".mp4", ".mov", ".mpeg4"]:
+                st.info("Extracting audio from video...")
+                audio = AudioSegment.from_file(audio_path)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as audio_tmp:
+                    audio.export(audio_tmp.name, format="mp3")
+                os.remove(audio_path)
+                audio_path = audio_tmp.name
             if os.path.exists(audio_path):
-                run_full_pipeline(audio_path, meeting_topic)
+                run_full_pipeline(audio_path, meeting_topic_upload)
             else:
-                st.error("Audio extraction failed. Please check the file format.")
-
-        except subprocess.CalledProcessError as e:
-            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
+                st.error("Temporary audio file was not created correctly.")
+                st.stop()
         except Exception as e:
-            st.error(f"An unexpected error occurred: {e}")
+            st.error(f"Failed to process uploaded file: {e}")
         finally:
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-            if 'audio_path' in locals() and os.path.exists(audio_path):
+            if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
 
-# --- YouTube URL Tab ---
+# --- YouTube URL Tab (final, corrected code) ---
 with tab_youtube:
     st.subheader("YouTube URL")
     youtube_url = st.text_input("YouTube Video URL")
@@ -609,43 +588,48 @@ with tab_youtube:
         if not youtube_url or not meeting_topic_yt:
             st.error("Please provide both a YouTube URL and a meeting topic.")
             st.stop()
-
-        st.info("Downloading YouTube video...")
         
-        # Declare variables at the top to ensure they are always defined.
+        st.info("Downloading YouTube video...")
         video_path = None
         audio_path = None
-
+        temp_cookies_path = None
         try:
-            # 1. Download the raw video file
+            cookies_content = st.secrets.get("YOUTUBE_COOKIES", None)
+            if cookies_content:
+                with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as temp_cookies_file:
+                    temp_cookies_file.write(cookies_content)
+                    temp_cookies_path = temp_cookies_file.name
+            else:
+                st.warning("No YouTube cookies found in secrets. The download may fail with a 403 error.")
+
             video_path = tempfile.mktemp(suffix=".mp4")
             ydl_opts = {
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': video_path,
                 'noplaylist': True,
                 'ignoreerrors': True,
+                'cookiefile': temp_cookies_path if temp_cookies_path else None,
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([youtube_url])
 
             if not os.path.exists(video_path):
-                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue.")
+                st.error("Video download failed.")
                 st.stop()
 
             st.info("Extracting audio from the video...")
-            # 2. Use a direct FFmpeg subprocess call to extract the audio
             audio_path = tempfile.mktemp(suffix=".mp3")
             
             command = [
-            'ffmpeg',
-            '-i', video_path,
-            '-vn',
-            '-q:a', '0',
-            audio_path
+                'ffmpeg',
+                '-i', video_path,
+                '-vn',
+                '-q:a', '0',
+                audio_path
             ]
-
+            
             subprocess.run(command, check=True, capture_output=True, text=True)
-
+            
             if os.path.exists(audio_path):
                 run_full_pipeline(audio_path, meeting_topic_yt)
             else:
@@ -661,6 +645,8 @@ with tab_youtube:
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
+            if temp_cookies_path and os.path.exists(temp_cookies_path):
+                os.remove(temp_cookies_path)
         
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
@@ -668,5 +654,3 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
-
-
