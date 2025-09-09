@@ -9,13 +9,11 @@ from pathlib import Path
 import requests
 import yt_dlp
 import subprocess
-import pytube
 from openai import OpenAI
 from bertopic import BERTopic
 import google.generativeai as genai
 from sklearn.feature_extraction.text import CountVectorizer
 from xhtml2pdf import pisa
-from pytube import YouTube, exceptions
 
 # =========================================================================
 # === STEP 1: CONFIGURATION AND API CLIENT SETUP (Backend Handling) =======
@@ -667,6 +665,7 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
