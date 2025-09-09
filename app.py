@@ -14,6 +14,7 @@ from bertopic import BERTopic
 import google.generativeai as genai
 from sklearn.feature_extraction.text import CountVectorizer
 from xhtml2pdf import pisa
+from pytube import YouTube, exceptions
 
 # =========================================================================
 # === STEP 1: CONFIGURATION AND API CLIENT SETUP (Backend Handling) =======
@@ -606,24 +607,25 @@ with tab_youtube:
             st.error("Please provide both a YouTube URL and a meeting topic.")
             st.stop()
 
-        st.info("Downloading YouTube video...")
         video_path = None
         audio_path = None
 
         try:
+            st.info("Downloading YouTube video...")
+            yt = YouTube(youtube_url)
             # 1. Download the raw video file without using cookies
+            stream = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+            if not stream:
+                # Fallback to a non-progressive stream and extract audio later
+                stream = yt.streams.filter(file_extension='mp4').order_by('resolution').desc().first()
+            
+            if not stream:
+                raise ValueError("Could not find a suitable video stream to download.")
+
+            # Create a temporary file path
             video_path = tempfile.mktemp(suffix=".mp4")
-            ydl_opts = {
-                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                'outtmpl': video_path,
-                'noplaylist': True,
-                'ignoreerrors': True,
-                'retries': 5, # Added retries
-                'fragment-retries': 5, # Added fragment retries
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([youtube_url])
+            stream.download(output_path=os.path.dirname(video_path), filename=os.path.basename(video_path))
+            
 
             if not os.path.exists(video_path):
                 st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue. Please try uploading the file manually.")
@@ -649,6 +651,8 @@ with tab_youtube:
                 st.error("Audio extraction failed.")
                 st.stop()
 
+        except exceptions.PytubeError as e: # ADDED: Specific error handling for pytube
+            st.error(f"Pytube Error: {e}. The video may be private, region-restricted, or its streams are not accessible.")
         except subprocess.CalledProcessError as e:
             st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
         except Exception as e:
@@ -665,3 +669,4 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
