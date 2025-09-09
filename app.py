@@ -1,4 +1,5 @@
 import streamlit as st
+import platform
 import os
 import io
 import time
@@ -378,137 +379,162 @@ def run_full_pipeline(file_path, meeting_topic):
         with st.spinner("Uploading file and transcribing audio..."):
             audio_url = get_audio_url(file_path)
             transcript_id = transcribe_audio(audio_url)
-            transcript = get_transcription_result(transcript_id)
+            transcript_dict = get_transcription_result(transcript_id)
+            print(transcript_dict) # Keep this for debugging
+
+        # The following block must be indented to be part of the 'try' block,
+        # but after the 'with st.spinner' block has finished.
+        if 'text' in transcript_dict and transcript_dict['text']:
+            st.success("Transcription complete!")
+            
+            # Use transcript_dict to get all your data
+            raw_transcript = transcript_dict.get('text', '')
+            
+            # Correct the language detection, as it was using the wrong variable.
+            detected_language = transcript_dict.get('language_code', 'en')
+            st.info(f"Detected language: **{detected_language}**")
+
+            if detected_language != 'en':
+                with st.spinner(f"Translating the transcript from {detected_language} to English..."):
+                    try:
+                        # Use a powerful LLM to perform the translation
+                        translation_response = google_client.generate_content(
+                            f"Translate the following text into English:\n\n{raw_transcript}"
+                        )
+                        raw_transcript = translation_response.text
+                        st.success("Translation complete!")
+                    except Exception as e:
+                        st.warning(f"Translation failed: {e}. Proceeding with original transcript.")
+
+            if not raw_transcript or len(raw_transcript.strip()) == 0:
+                st.error("The transcription failed or returned an empty transcript. Please check your API key and try a video with clear speech.")
+                return # Use return, not st.stop() here
+
+            # Speaker Diarization with Timestamps
+            diarization_output = ""
+            utterances_list = transcript_dict.get('utterances')
+            if utterances_list:
+                for utterance in utterances_list:
+                    start_time = format_time(utterance.get('start', 0))
+                    if detected_language != 'en':
+                        try:
+                            translated_text = google_client.generate_content(
+                                f"Translate the following into English:\n\n{utterance['text']}"
+                            ).text
+                        except Exception:
+                            translated_text = utterance['text']
+                    else:
+                        translated_text = utterance['text']
+                    diarization_output += f"[{start_time}] Speaker {utterance['speaker']}: {translated_text}\n"
+                st.markdown("### Speaker Diarization")
+                st.text_area("Transcript with Speakers", diarization_output, height=200)
+            else:
+                st.warning("No speaker diarization data was returned by the transcription service. This may be due to a transcription failure or very short audio.")
+                diarization_output = "No speaker data available."
+            
+            # Sentiment Analysis
+            if 'sentiment_analysis_results' in transcript_dict and transcript_dict['sentiment_analysis_results']:
+                sentiment_counts = {}
+                for sentiment in transcript_dict['sentiment_analysis_results']:
+                    sentiment_counts[sentiment['sentiment']] = sentiment_counts.get(sentiment['sentiment'], 0) + 1
+                dominant_sentiment = max(sentiment_counts, key=sentiment_counts.get)
+                st.markdown("### Sentiment Analysis")
+                st.write(f"The overall sentiment of the meeting is: **{dominant_sentiment.capitalize()}**")
+            else:
+                st.markdown("### Sentiment Analysis")
+                st.warning("No sentiment analysis data available.")
+                dominant_sentiment = "Not available"
+
+            # Key Topics
+            st.markdown("### Key Topics (powered by Topic Modeling)")
+            # Safely get the 'utterances' list from the transcription dictionary.
+            utterances_for_topics = transcript_dict.get('utterances')
+
+            # Check if the list of utterances exists and is not empty.
+            if utterances_for_topics:
+                # Use a list comprehension to get the text from each utterance.
+                docs_for_topic_modeling = [utterance['text'] for utterance in utterances_for_topics]
+
+                # Check if there is actual text to analyze.
+                if docs_for_topic_modeling:
+                    try:
+                        # Perform topic modeling and display the results.
+                        topics = perform_topic_modeling(docs_for_topic_modeling)
+                        st.json(topics)
+                    except Exception as e:
+                        # Catch any errors from the topic modeling function itself.
+                        st.warning("Topic modeling could not be completed. The final report will be generated without this section.")
+                        topics = [{"topic": "Topic modeling failed", "count": 0, "keywords": ""}]
+                else:
+                    # Fallback if the utterances list contains no text.
+                    topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
+                    st.warning("Not enough data to perform topic modeling. The utterances list was empty.")
+            else:
+                # Fallback if no utterances list was returned at all.
+                topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
+                st.warning("No speaker utterances were returned. This may be due to a transcription failure or very short audio.")
+
+            # This ensures 'topics' is always defined for the final report.
+            if 'topics' not in locals():
+                topics = [{"topic": "Not available", "count": 0, "keywords": ""}]
+            # Summarization
+            st.subheader("2. AI-Powered Summaries")
+            with st.spinner("Generating summaries with multiple AI models..."):
+                summary_1 = get_summary_model_1(raw_transcript)
+                summary_2 = get_summary_model_2(raw_transcript)
+                summary_3 = get_summary_model_3(raw_transcript)
+            
+            st.success("Summaries generated!")
+            st.markdown("### Consolidated Summary")
+            
+            consolidated_summary_list = []
+            if summary_1:
+                st.markdown("### Summary from Model 1")
+                st.text_area("Summary from Model 1", summary_1, height=150)
+                consolidated_summary_list.append(summary_1)
+            if summary_2:
+                st.markdown("### Summary from Model 2")
+                st.text_area("Summary from Model 2", summary_2, height=150)
+                consolidated_summary_list.append(summary_2)
+            if summary_3:
+                st.markdown("### Summary from Model 3")
+                st.text_area("Summary from Model 3", summary_3, height=150)
+                consolidated_summary_list.append(summary_3)
+
+            if consolidated_summary_list:
+                consolidated_summary = "\n\n".join(consolidated_summary_list)
+                st.text_area("Final Consolidated Summary", consolidated_summary, height=300)
+            else:
+                consolidated_summary = "All AI models failed to generate a summary. Please check your API keys and try again."
+                st.error(consolidated_summary)
+
+            st.markdown("---")
+            st.header("Full Report 📋")
+            
+            report_data = {
+                "date": time.strftime("%Y-%m-%d"),
+                "topic": meeting_topic,
+                "consolidated_summary": consolidated_summary,
+                "summary_1": summary_1,
+                "summary_2": summary_2,
+                "summary_3": summary_3,
+                "diarization": diarization_output,
+                "sentiment": dominant_sentiment.capitalize(),
+                "topics": topics
+            }
+            
+            st.markdown(generate_pdf_report(report_data), unsafe_allow_html=True)
+        else:
+            st.error("Transcription failed to return a valid result. The full pipeline cannot be executed.")
+            return None # Use return here
+            
     except requests.exceptions.HTTPError as e:
         st.error(f"Failed to transcribe audio: HTTP Error {e.response.status_code}")
         st.error(f"Error message: {e.response.text}")
-        return None # Stop the pipeline on error
-
+        return None
     except Exception as e:
         st.error(f"An unexpected error occurred during transcription: {e}")
-        return None # Stop the pipeline on error
-
-    if transcript:
-        st.success("Transcription complete!")
-        
-        # New: Language Detection and Translation
-        detected_language = transcript.get('language_code', 'en')
-        st.info(f"Detected language: **{detected_language}**")
-
-        raw_transcript = transcript.get('text', '')
-        if detected_language != 'en':
-            with st.spinner(f"Translating the transcript from {detected_language} to English..."):
-                # Use one of your powerful LLMs to perform the translation
-                try:
-                    translation_response = google_client.generate_content(
-                        f"Translate the following text into English:\n\n{raw_transcript}"
-                    )
-                    raw_transcript = translation_response.text
-                    st.success("Translation complete!")
-                except Exception as e:
-                    st.warning(f"Translation failed: {e}. Proceeding with original transcript.")
-
-        # Speaker Diarization with Timestamps
-        diarization_output = ""
-        utterances_list = transcript.get('utterances')
-        if utterances_list:
-            for utterance in utterances_list:
-                start_time = format_time(utterance.get('start', 0))
-                # New: Translate individual utterances for the diarization output
-                if detected_language != 'en':
-                    try:
-                        translated_text = google_client.generate_content(
-                            f"Translate the following into English:\n\n{utterance['text']}"
-                        ).text
-                    except Exception:
-                        translated_text = utterance['text']
-                else:
-                    translated_text = utterance['text']
-
-                diarization_output += f"[{start_time}] Speaker {utterance['speaker']}: {translated_text}\n"
-
-            st.markdown("### Speaker Diarization")
-            st.text_area("Transcript with Speakers", diarization_output, height=200)
-        else:
-            st.warning("No speaker diarization data was returned by the transcription service. This may be due to a transcription failure or very short audio.")
-            diarization_output = "No speaker data available."
-            
-        # Sentiment Analysis
-        # ... (This section remains the same, it will run on the translated text if applicable) ...
-        if 'sentiment_analysis_results' in transcript and transcript['sentiment_analysis_results']:
-            sentiment_counts = {}
-            for sentiment in transcript['sentiment_analysis_results']:
-                sentiment_counts[sentiment['sentiment']] = sentiment_counts.get(sentiment['sentiment'], 0) + 1
-            
-            dominant_sentiment = max(sentiment_counts, key=sentiment_counts.get)
-            st.markdown("### Sentiment Analysis")
-            st.write(f"The overall sentiment of the meeting is: **{dominant_sentiment.capitalize()}**")
-        else:
-            st.markdown("### Sentiment Analysis")
-            st.warning("No sentiment analysis data available.")
-            dominant_sentiment = "Not available"
-
-        # Key Topics
-        st.markdown("### Key Topics (powered by Topic Modeling)")
-        utterances_for_topics = transcript.get('utterances')
-        docs_for_topic_modeling = [utterance['text'] for utterance in utterances_for_topics] if utterances_for_topics else []
-        
-        if docs_for_topic_modeling:
-            topics = perform_topic_modeling(docs_for_topic_modeling)
-            st.json(topics)
-        else:
-            topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
-            st.warning("Not enough data to perform topic modeling. This may be due to a transcription failure.")
-
-        # Summarization
-        st.subheader("2. AI-Powered Summaries")
-        with st.spinner("Generating summaries with multiple AI models..."):
-            summary_1 = get_summary_model_1(raw_transcript)
-            summary_2 = get_summary_model_2(raw_transcript)
-            summary_3 = get_summary_model_3(raw_transcript)
-        
-        st.success("Summaries generated!")
-        st.markdown("### Consolidated Summary")
-        
-        consolidated_summary_list = []
-        if summary_1: 
-            st.markdown("### Summary from Model 1")
-            st.text_area("Summary from Model 1", summary_1, height=150)
-            consolidated_summary_list.append(summary_1)
-        if summary_2: 
-            st.markdown("### Summary from Model 2")
-            st.text_area("Summary from Model 2", summary_2, height=150)
-            consolidated_summary_list.append(summary_2)
-        if summary_3: 
-            st.markdown("### Summary from Model 3")
-            st.text_area("Summary from Model 3", summary_3, height=150)
-            consolidated_summary_list.append(summary_3)
-
-        if consolidated_summary_list:
-            consolidated_summary = "\n\n".join(consolidated_summary_list)
-            st.text_area("Final Consolidated Summary", consolidated_summary, height=300)
-        else:
-            consolidated_summary = "All AI models failed to generate a summary. Please check your API keys and try again."
-            st.error(consolidated_summary)
-
-        st.markdown("---")
-        st.header("Full Report 📋")
-        
-        report_data = {
-            "date": time.strftime("%Y-%m-%d"),
-            "topic": meeting_topic,
-            "consolidated_summary": consolidated_summary,
-            "summary_1": summary_1,
-            "summary_2": summary_2,
-            "summary_3": summary_3,
-            "diarization": diarization_output,
-            "sentiment": dominant_sentiment.capitalize(),
-            "topics": topics
-        }
-        
-        st.markdown(generate_pdf_report(report_data), unsafe_allow_html=True)
-    else:
-        st.error("Transcription failed to return a valid result. The full pipeline cannot be executed.")    
+        return None 
 # =========================================================================
 # === STEP 4: STREAMLIT UI AND LOGIC ======================================
 # =========================================================================
@@ -519,53 +545,63 @@ st.markdown("---")
 
 tab_upload, tab_youtube = st.tabs(["Upload File", "YouTube URL"])
 with tab_upload:
-    meeting_topic = st.text_input("Meeting Topic", placeholder="e.g., Q3 Marketing Strategy Review")
+    st.subheader("Meeting Topic")
+    meeting_topic = st.text_input("Enter the main topic of the meeting", placeholder="e.g., Q1 Financial Results")
+    st.subheader("Upload Meeting Audio/Video")
     uploaded_file = st.file_uploader(
         "Upload Meeting Audio/Video (.mp3, .m4a, .mp4, .mov)",
-        type=["mp3", "m4a", "mp4", "mov"]
+        type=["mp3", "m4a", "mp4", "mov", "m4v"]
     )
-    if st.button("Generate Report"):
+
+    if st.button("Generate Report 🚀", key="upload_button"):
         if not uploaded_file or not meeting_topic:
             st.error("Please provide both a file and a meeting topic.")
             st.stop()
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
-            tmp_file.write(uploaded_file.read())
-            audio_path = tmp_file.name
+        # Determine the file path
+        file_path = uploaded_file.name
         
-        if audio_path.endswith((".mp4", ".mov")):
-            st.info("Extracting audio from video using FFmpeg...")
-            output_audio_path = tempfile.mktemp(suffix=".mp3")
-            try:
-                # Direct subprocess call to ffmpeg
-                command = [
-                    'ffmpeg',
-                    '-i', audio_path,
-                    '-vn', # no video
-                    '-acodec', 'libmp3lame', # use libmp3lame for MP3
-                    '-q:a', '2', # audio quality
-                    output_audio_path
-                ]
-                subprocess.run(command, check=True, capture_output=True, text=True)
-                os.remove(audio_path) # Clean up original video file
-                audio_path = output_audio_path
-            except subprocess.CalledProcessError as e:
-                st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                if os.path.exists(output_audio_path):
-                    os.remove(output_audio_path)
-                st.stop()
-            except FileNotFoundError:
-                st.error("FFmpeg not found. Please ensure it is in your packages.txt file.")
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                st.stop()
+        # Write the uploaded file to a temporary location
+        st.info("Saving uploaded file to a temporary location...")
+        temp_dir = tempfile.gettempdir()
+        temp_file_path = os.path.join(temp_dir, file_path)
+        with open(temp_file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        st.info("Extracting audio from the video...")
+        
+        # Determine the path for the FFmpeg executable
+        if platform.system() == 'Windows':
+            ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg.exe')
+        else:
+            ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg')
+
+        # Run FFmpeg to extract audio
+        audio_path = tempfile.mktemp(suffix=".mp3")
+        command = [
+            ffmpeg_executable,
+            '-i', temp_file_path,
+            '-vn',
+            '-q:a', '0',
+            audio_path
+        ]
         
         try:
-            run_full_pipeline(audio_path, meeting_topic)
-        finally:
+            subprocess.run(command, check=True, capture_output=True, text=True)
+
             if os.path.exists(audio_path):
+                run_full_pipeline(audio_path, meeting_topic)
+            else:
+                st.error("Audio extraction failed. Please check the file format.")
+
+        except subprocess.CalledProcessError as e:
+            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
+        except Exception as e:
+            st.error(f"An unexpected error occurred: {e}")
+        finally:
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+            if 'audio_path' in locals() and os.path.exists(audio_path):
                 os.remove(audio_path)
 
 # --- YouTube URL Tab ---
@@ -581,34 +617,38 @@ with tab_youtube:
             st.stop()
 
         st.info("Downloading YouTube video...")
+        
+        # Declare variables at the top to ensure they are always defined.
         video_path = None
         audio_path = None
 
         try:
-            # 1. Download the raw video file without using cookies
+            # 1. Download the raw video file
             video_path = tempfile.mktemp(suffix=".mp4")
             ydl_opts = {
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': video_path,
                 'noplaylist': True,
                 'ignoreerrors': True,
-                'retries': 5, # Added retries
-                'fragment-retries': 5, # Added fragment retries
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([youtube_url])
 
             if not os.path.exists(video_path):
-                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue. Please try uploading the file manually.")
+                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue.")
                 st.stop()
 
             st.info("Extracting audio from the video...")
             # 2. Use a direct FFmpeg subprocess call to extract the audio
             audio_path = tempfile.mktemp(suffix=".mp3")
+            
+            if platform.system() == 'Windows':
+                ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg.exe')
+            else:
+                ffmpeg_executable = os.path.join(os.getcwd(), 'bin', 'ffmpeg')
 
             command = [
-                'ffmpeg',
+                ffmpeg_executable,
                 '-i', video_path,
                 '-vn',
                 '-q:a', '0',
