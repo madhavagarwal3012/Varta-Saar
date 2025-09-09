@@ -10,7 +10,6 @@ import requests
 import yt_dlp
 import subprocess
 import pytube
-import pydub
 from openai import OpenAI
 from bertopic import BERTopic
 import google.generativeai as genai
@@ -616,7 +615,6 @@ with st.container():
             if "youtube.com" in input_url or "youtu.be" in input_url:
                 st.info("YouTube URL detected. Downloading video...")
                 
-                # Use pytube to download video
                 yt = pytube.YouTube(input_url)
                 stream = yt.streams.get_highest_resolution()
                 video_path = tempfile.mktemp(suffix=".mp4")
@@ -640,7 +638,7 @@ with st.container():
                 ]
                 subprocess.run(command, check=True, capture_output=True, text=True)
 
-            # Otherwise, assume it's a direct audio URL
+            # Assume it's a direct audio URL
             else:
                 st.info("Direct audio URL detected. Downloading file...")
                 
@@ -652,25 +650,37 @@ with st.container():
                 with open(audio_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                
-            # --- New File Integrity Check ---
+            
+            # --- New File Integrity Check using FFmpeg ---
             if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
                 st.error("Download or extraction failed. The resulting audio file is empty.")
                 st.stop()
-                
-            try:
-                # This will raise a CouldntDecodeError if the file is corrupt or invalid
-                AudioSegment.from_file(audio_path)
+            
+            st.info("Verifying file integrity...")
+            ffmpeg_path = os.path.join(Path(__file__).parent, 'bin', 'ffmpeg.exe')
+            
+            integrity_check_command = [
+                ffmpeg_path,
+                '-v', 'error',  # Only show error messages
+                '-i', audio_path,
+                '-f', 'null',
+                '-'
+            ]
+            
+            result = subprocess.run(integrity_check_command, capture_output=True, text=True)
+            
+            if result.returncode == 0:
                 st.success("File integrity check passed! Proceeding with transcription.")
                 run_full_pipeline(audio_path, meeting_topic_url)
-            except CouldntDecodeError:
-                st.error("The downloaded or extracted audio file is corrupted or in an invalid format. Cannot proceed with transcription.")
+            else:
+                st.error("The downloaded or extracted audio file is corrupted or in an invalid format. Cannot proceed.")
+                st.info(f"FFmpeg Error Log: {result.stderr}")
                 st.stop()
-
+            
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
         finally:
-            if 'video_path' in locals() and os.path.exists(video_path):
+            if 'video_path' in locals() and video_path and os.path.exists(video_path):
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
@@ -681,6 +691,7 @@ with st.container():
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
