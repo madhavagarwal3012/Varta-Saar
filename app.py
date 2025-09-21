@@ -643,9 +643,9 @@ with tab_youtube:
             except yt_dlp.utils.DownloadError as e:
                     st.warning(f"Download failed with a temporary issue (e.g., network error). Please try again later.")
                     st.stop()
-                except Exception as e:
-                    st.error(f"An unexpected error occurred during download: {e}")
-                    st.stop()
+            except Exception as e:
+                st.error(f"An unexpected error occurred during download: {e}")
+                st.stop()
 
             if not os.path.exists(video_path):
                 st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
@@ -720,12 +720,13 @@ with tab_youtube:
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
-
+                
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
 # =========================================================================
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
