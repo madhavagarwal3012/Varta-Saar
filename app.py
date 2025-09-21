@@ -635,7 +635,7 @@ with tab_youtube:
                     st.error(f"An unexpected error occurred during download: {e}")
                     st.stop()
 
-                if not os.path.exists(video_path):
+                if not os.path.exists(video_path) or os.path.getsize(video_path) == 0::
                     st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
                     st.info("If the video is restricted, please try again with a cookies.txt file.")
                     st.stop()
@@ -667,12 +667,6 @@ with tab_youtube:
                         
             else:
                 st.error("Invalid URL provided. The app only supports YouTube video URLs and direct links to audio files (.mp3, .m4a, .wav).")
-                st.stop()
-
-            if os.path.exists(audio_path):
-                run_full_pipeline(audio_path, meeting_topic_yt)
-            else:
-                st.error("Audio extraction failed.")
                 st.stop()
 
         # --- File Integrity Check using FFmpeg ---
@@ -715,12 +709,3 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
-
-
-
-
-
-
-
-
-
