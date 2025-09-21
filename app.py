@@ -649,8 +649,8 @@ with tab_youtube:
 
             if not os.path.exists(video_path):
                 st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
-                st.info("If the video is restricted, please try again with a cookies.txt file.")
-                st.stop()
+                    st.info("If the video is restricted, please try again with a cookies.txt file.")
+                    st.stop()
 
             st.info("Extracting audio from the video...")
             # 2. Use a direct FFmpeg subprocess call to extract the audio
@@ -727,6 +727,7 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
