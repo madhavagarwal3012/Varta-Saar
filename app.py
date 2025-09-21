@@ -636,9 +636,9 @@ with tab_youtube:
                     
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(input_url, download=False)
-                video_filename = ydl.prepare_filename(info_dict)
-                ydl.download([input_url])
+                    info_dict = ydl.extract_info(input_url, download=False)
+                    video_filename = ydl.prepare_filename(info_dict)
+                    ydl.download([input_url])
                 
             except yt_dlp.utils.DownloadError as e:
                     st.warning(f"Download failed with a temporary issue (e.g., network error). Please try again later.")
@@ -666,11 +666,50 @@ with tab_youtube:
 
             subprocess.run(command, check=True, capture_output=True, text=True)
 
-            if os.path.exists(audio_path):
+        elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
+                st.info("Direct audio URL detected. Downloading file...")
+                
+                response = requests.get(input_url, stream=True)
+                response.raise_for_status()
+                audio_path = tempfile.mktemp(suffix=".mp3")
+                
+                with open(audio_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                        
+        else:
+                st.error("Invalid URL provided. The app only supports YouTube video URLs and direct links to audio files (.mp3, .m4a, .wav).")
+                st.stop()
+
+        if os.path.exists(audio_path):
                 run_full_pipeline(audio_path, meeting_topic_yt)
-            else:
+        else:
                 st.error("Audio extraction failed.")
                 st.stop()
+
+        # --- File Integrity Check using FFmpeg ---
+            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
+                st.error("Download or extraction failed. The resulting audio file is empty.")
+                st.stop()
+                
+            st.info("Verifying file integrity...")
+            integrity_check_command = [
+                'ffmpeg',
+                '-v', 'error',
+                '-i', audio_path,
+                '-f', 'null',
+                '-'
+            ]
+            result = subprocess.run(integrity_check_command, capture_output=True, text=True)
+
+            if result.returncode == 0:
+                st.success("File integrity check passed! Proceeding with transcription.")
+                run_full_pipeline(audio_path, meeting_topic_url)
+            else:
+                st.error("The downloaded or extracted audio file is corrupted or in an invalid format. Cannot proceed.")
+                st.info(f"FFmpeg Error Log: {result.stderr}")
+                st.stop()
+            
 
         except subprocess.CalledProcessError as e:
             st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
@@ -688,4 +727,5 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
