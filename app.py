@@ -596,23 +596,27 @@ with tab_upload:
 
 # --- YouTube URL Tab ---
 with tab_youtube:
-    st.subheader("YouTube URL")
-    youtube_url = st.text_input("YouTube Video URL")
-    st.subheader("Meeting Topic (YouTube)")
-    meeting_topic_yt = st.text_input("Enter the main topic of the meeting for the YouTube video", placeholder="e.g., Apple WWDC 2024 Keynote")
+    st.subheader("YouTube URL 🔗")
+    input_url = st.text_input("Enter a YouTube video URL or a direct audio URL (.mp3, .m4a)")
+    cookies_file = st.file_uploader("Upload your cookies.txt file (for restricted videos)", type=["txt"])
+    meeting_topic_url = st.text_input("Enter the main topic of the content", placeholder="e.g., Apple WWDC 2024 Keynote")
 
-    if st.button("Generate Report 🚀", key="youtube_button"):
-        if not youtube_url or not meeting_topic_yt:
-            st.error("Please provide both a YouTube URL and a meeting topic.")
+    if st.button("Generate Report 🚀", key="url_button"):
+        if not input_url or not meeting_topic_url:
+            st.error("Please provide a valid URL and a meeting topic.")
             st.stop()
 
-        st.info("Downloading YouTube video...")
         video_path = None
         audio_path = None
+        cookies_path = None
+
+        video_path = tempfile.mktemp(suffix=".mp4")
 
         try:
+            if "youtube.com" in input_url or "youtu.be" in input_url:
+                st.info("YouTube URL detected. Downloading video...")
+
             # 1. Download the raw video file without using cookies
-            video_path = tempfile.mktemp(suffix=".mp4")
             ydl_opts = {
                 'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 'outtmpl': video_path,
@@ -622,12 +626,31 @@ with tab_youtube:
                 'fragment-retries': 5, # Added fragment retries
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
             }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([youtube_url])
+
+            if cookies_file:
+                    cookies_path = tempfile.mktemp(suffix=".txt")
+                    with open(cookies_path, "wb") as f:
+                        f.write(cookies_file.getbuffer())
+                    ydl_opts['cookiefile'] = cookies_path
+
+                    
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info_dict = ydl.extract_info(input_url, download=False)
+                video_filename = ydl.prepare_filename(info_dict)
+                ydl.download([input_url])
+                
+            except yt_dlp.utils.DownloadError as e:
+                    st.warning(f"Download failed with a temporary issue (e.g., network error). Please try again later.")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"An unexpected error occurred during download: {e}")
+                    st.stop()
 
             if not os.path.exists(video_path):
-                st.error("Video download failed. This may be due to the video being private, age-restricted, or a server issue. Please try uploading the file manually.")
-                st.stop()
+                st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
+                    st.info("If the video is restricted, please try again with a cookies.txt file.")
+                    st.stop()
 
             st.info("Extracting audio from the video...")
             # 2. Use a direct FFmpeg subprocess call to extract the audio
@@ -665,3 +688,4 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
