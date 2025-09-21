@@ -617,56 +617,56 @@ with tab_youtube:
                 st.info("YouTube URL detected. Downloading video...")
 
             # 1. Download the raw video file without using cookies
-            ydl_opts = {
-                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                'outtmpl': video_path,
-                'noplaylist': True,
-                'ignoreerrors': True,
-                'retries': 5, # Added retries
-                'fragment-retries': 5, # Added fragment retries
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
-            }
+                ydl_opts = {
+                    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                    'outtmpl': video_path,
+                    'noplaylist': True,
+                    'ignoreerrors': True,
+                    'retries': 5, # Added retries
+                    'fragment-retries': 5, # Added fragment retries
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
+                }
 
-            if cookies_file:
-                    cookies_path = tempfile.mktemp(suffix=".txt")
-                    with open(cookies_path, "wb") as f:
-                        f.write(cookies_file.getbuffer())
-                    ydl_opts['cookiefile'] = cookies_path
+                if cookies_file:
+                        cookies_path = tempfile.mktemp(suffix=".txt")
+                        with open(cookies_path, "wb") as f:
+                            f.write(cookies_file.getbuffer())
+                        ydl_opts['cookiefile'] = cookies_path
 
+                        
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info_dict = ydl.extract_info(input_url, download=False)
+                        video_filename = ydl.prepare_filename(info_dict)
+                        ydl.download([input_url])
                     
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info_dict = ydl.extract_info(input_url, download=False)
-                    video_filename = ydl.prepare_filename(info_dict)
-                    ydl.download([input_url])
-                
-            except yt_dlp.utils.DownloadError as e:
-                    st.warning(f"Download failed with a temporary issue (e.g., network error). Please try again later.")
+                except yt_dlp.utils.DownloadError as e:
+                        st.warning(f"Download failed with a temporary issue (e.g., network error). Please try again later.")
+                        st.stop()
+                except Exception as e:
+                    st.error(f"An unexpected error occurred during download: {e}")
                     st.stop()
-            except Exception as e:
-                st.error(f"An unexpected error occurred during download: {e}")
-                st.stop()
 
-            if not os.path.exists(video_path):
-                st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
-                st.info("If the video is restricted, please try again with a cookies.txt file.")
-                st.stop()
+                if not os.path.exists(video_path):
+                    st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
+                    st.info("If the video is restricted, please try again with a cookies.txt file.")
+                    st.stop()
 
-            st.info("Extracting audio from the video...")
-            # 2. Use a direct FFmpeg subprocess call to extract the audio
-            audio_path = tempfile.mktemp(suffix=".mp3")
+                st.info("Extracting audio from the video...")
+                # 2. Use a direct FFmpeg subprocess call to extract the audio
+                audio_path = tempfile.mktemp(suffix=".mp3")
 
-            command = [
-                'ffmpeg',
-                '-i', video_path,
-                '-vn',
-                '-q:a', '0',
-                audio_path
-            ]
+                command = [
+                    'ffmpeg',
+                    '-i', video_path,
+                    '-vn',
+                    '-q:a', '0',
+                    audio_path
+                ]
 
-            subprocess.run(command, check=True, capture_output=True, text=True)
+                subprocess.run(command, check=True, capture_output=True, text=True)
 
-        elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
+            elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
                 st.info("Direct audio URL detected. Downloading file...")
                 
                 response = requests.get(input_url, stream=True)
@@ -677,13 +677,13 @@ with tab_youtube:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
                         
-        else:
+            else:
                 st.error("Invalid URL provided. The app only supports YouTube video URLs and direct links to audio files (.mp3, .m4a, .wav).")
                 st.stop()
 
-        if os.path.exists(audio_path):
+            if os.path.exists(audio_path):
                 run_full_pipeline(audio_path, meeting_topic_yt)
-        else:
+            else:
                 st.error("Audio extraction failed.")
                 st.stop()
 
@@ -727,6 +727,7 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
