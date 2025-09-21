@@ -381,22 +381,17 @@ def run_full_pipeline(file_path, meeting_topic):
             transcript_dict = get_transcription_result(transcript_id)
             print(transcript_dict) # Keep this for debugging
 
-        # The following block must be indented to be part of the 'try' block,
-        # but after the 'with st.spinner' block has finished.
         if 'text' in transcript_dict and transcript_dict['text']:
             st.success("Transcription complete!")
             
-            # Use transcript_dict to get all your data
             raw_transcript = transcript_dict.get('text', '')
             
-            # Correct the language detection, as it was using the wrong variable.
             detected_language = transcript_dict.get('language_code', 'en')
             st.info(f"Detected language: **{detected_language}**")
 
             if detected_language != 'en':
                 with st.spinner(f"Translating the transcript from {detected_language} to English..."):
                     try:
-                        # Use a powerful LLM to perform the translation
                         translation_response = google_client.generate_content(
                             f"Translate the following text into English:\n\n{raw_transcript}"
                         )
@@ -407,9 +402,8 @@ def run_full_pipeline(file_path, meeting_topic):
 
             if not raw_transcript or len(raw_transcript.strip()) == 0:
                 st.error("The transcription failed or returned an empty transcript. Please check your API key and try a video with clear speech.")
-                return # Use return, not st.stop() here
+                return 
 
-            # Speaker Diarization with Timestamps
             diarization_output = ""
             utterances_list = transcript_dict.get('utterances')
             if utterances_list:
@@ -431,7 +425,6 @@ def run_full_pipeline(file_path, meeting_topic):
                 st.warning("No speaker diarization data was returned by the transcription service. This may be due to a transcription failure or very short audio.")
                 diarization_output = "No speaker data available."
             
-            # Sentiment Analysis
             if 'sentiment_analysis_results' in transcript_dict and transcript_dict['sentiment_analysis_results']:
                 sentiment_counts = {}
                 for sentiment in transcript_dict['sentiment_analysis_results']:
@@ -444,39 +437,29 @@ def run_full_pipeline(file_path, meeting_topic):
                 st.warning("No sentiment analysis data available.")
                 dominant_sentiment = "Not available"
 
-            # Key Topics
             st.markdown("### Key Topics (powered by Topic Modeling)")
-            # Safely get the 'utterances' list from the transcription dictionary.
             utterances_for_topics = transcript_dict.get('utterances')
 
-            # Check if the list of utterances exists and is not empty.
             if utterances_for_topics:
-                # Use a list comprehension to get the text from each utterance.
                 docs_for_topic_modeling = [utterance['text'] for utterance in utterances_for_topics]
 
-                # Check if there is actual text to analyze.
                 if docs_for_topic_modeling:
                     try:
-                        # Perform topic modeling and display the results.
                         topics = perform_topic_modeling(docs_for_topic_modeling)
                         st.json(topics)
                     except Exception as e:
-                        # Catch any errors from the topic modeling function itself.
                         st.warning("Topic modeling could not be completed. The final report will be generated without this section.")
                         topics = [{"topic": "Topic modeling failed", "count": 0, "keywords": ""}]
                 else:
-                    # Fallback if the utterances list contains no text.
                     topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
                     st.warning("Not enough data to perform topic modeling. The utterances list was empty.")
             else:
-                # Fallback if no utterances list was returned at all.
                 topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
                 st.warning("No speaker utterances were returned. This may be due to a transcription failure or very short audio.")
 
-            # This ensures 'topics' is always defined for the final report.
             if 'topics' not in locals():
                 topics = [{"topic": "Not available", "count": 0, "keywords": ""}]
-            # Summarization
+
             st.subheader("2. AI-Powered Summaries")
             with st.spinner("Generating summaries with multiple AI models..."):
                 summary_1 = get_summary_model_1(raw_transcript)
@@ -525,11 +508,14 @@ def run_full_pipeline(file_path, meeting_topic):
             st.markdown(generate_pdf_report(report_data), unsafe_allow_html=True)
         else:
             st.error("Transcription failed to return a valid result. The full pipeline cannot be executed.")
-            return None # Use return here
+            return None
             
     except requests.exceptions.HTTPError as e:
         st.error(f"Failed to transcribe audio: HTTP Error {e.response.status_code}")
         st.error(f"Error message: {e.response.text}")
+        return None
+    except requests.exceptions.ConnectionError as e: # <--- ADD THIS BLOCK
+        st.error(f"A network connection issue occurred during transcription. Please check your internet connection and try again.")
         return None
     except Exception as e:
         st.error(f"An unexpected error occurred during transcription: {e}")
@@ -727,6 +713,7 @@ with tab_youtube:
 
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
+
 
 
 
