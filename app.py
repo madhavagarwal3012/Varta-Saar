@@ -605,14 +605,26 @@ with tab_youtube:
                 st.info("YouTube URL detected. Downloading video...")
 
             # 1. Download the raw video file without using cookies
+                # ydl_opts = {
+                #     'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                #     'outtmpl': video_path,
+                #     'noplaylist': True,
+                #     'ignoreerrors': True,
+                #     'retries': 5, # Added retries
+                #     'fragment-retries': 5, # Added fragment retries
+                #     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
+                # }
+
                 ydl_opts = {
-                    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                    'format': 'best[ext=mp4]/best',
                     'outtmpl': video_path,
                     'noplaylist': True,
                     'ignoreerrors': True,
-                    'retries': 5, # Added retries
-                    'fragment-retries': 5, # Added fragment retries
-                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'web']
+                        }
+                    }
                 }
 
                 if cookies_file:
