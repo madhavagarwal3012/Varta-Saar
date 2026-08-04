@@ -616,7 +616,7 @@ with tab_youtube:
                 # }
 
                 ydl_opts = {
-                    'format': 'best[ext=mp4]/best',
+                    'format': '18 / best',
                     'outtmpl': video_path,
                     'noplaylist': True,
                     'ignoreerrors': True,
