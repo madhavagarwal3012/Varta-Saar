@@ -7,4 +7,3 @@ requests
 yt-dlp
 pydub
 xhtml2pdf
-pytube==15.0.0
