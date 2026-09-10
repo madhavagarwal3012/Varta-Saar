@@ -287,6 +287,29 @@ def generate_pdf_report(report_data, output_filename="meeting_report.pdf"):
     # 4. Build Document
     doc.build(story)
 
+def transcribe_audio(audio_url):
+    """
+    Sends an audio URL for transcription with language detection enabled.
+    """
+    headers = {'authorization': ASSEMBLYAI_API_KEY, 'content-type': 'application/json'}
+    data = {
+        "audio_url": audio_url,
+        "speaker_labels": True,
+        "sentiment_analysis": True,
+        "language_detection": True  # NEW: Enable automatic language detection
+    }
+    response = requests.post(
+        'https://api.assemblyai.com/v2/transcript',
+        headers=headers,
+        json=data
+    )
+    if response.status_code == 200:
+        return response.json()['id']
+    else:
+        st.error(f"Failed to submit transcription job: {response.status_code}")
+        st.json(response.json())
+        st.stop()
+        
 # =========================================================================
 # === STEP 3: MAIN APPLICATION PIPELINE ===================================
 # =========================================================================
