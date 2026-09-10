@@ -2,7 +2,7 @@
 
 > **Transform raw, multi-speaker meeting recordings and media streams into clear, multi-model AI executive intelligence and structured PDF reports.**
 
-[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://streamlit.io)
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://varta-saar.streamlit.app/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -10,7 +10,7 @@
 
 ## 📌 Overview
 
-**Varta-Saar** (Sanskrit for *"Essence of Conversation"*) is an enterprise-grade AI meeting assistant designed to bridge the gap between unstructured conversation and actionable decision-making. 
+**Varta-Saar** *(Sanskrit for "Essence of Conversation")* is an enterprise-grade AI meeting assistant designed to bridge the gap between unstructured conversation and actionable decision-making. 
 
 Unlike single-LLM solutions, Varta-Saar processes speech through an ensemble pipeline—combining **AssemblyAI**, **BERTopic**, **OpenAI (GPT-4o)**, **Google Gemini**, **Perplexity Sonar**, and **Groq (Llama-3)**—to deliver cross-validated meeting summaries, precise speaker diarization, sentiment tracking, and publication-ready PDF exports.
 
@@ -68,26 +68,37 @@ To eliminate single-model bias and hallucinations, Varta-Saar queries an ensembl
 ### Installation
 
 1. **Clone the repository:**
-   git clone https://github.com/your-username/varta-saar.git
+   
+   ```sh
+   git clone https://github.com/madhavagarwal3012/Varta-Saar.git
    cd varta-saar
+   ```
 
 2. **Create and activate a virtual environment:**
+    ```sh
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
 3. **Install dependencies:**
+   ```sh
    pip install -r requirements.txt
+   ```
 
 4. **Configure API Keys:**
+   ```sh
    Create a .env file or .streamlit/secrets.toml with your credentials:
    ASSEMBLYAI_API_KEY = "your_assemblyai_key"
    OPENAI_API_KEY = "your_openai_key"
    GEMINI_API_KEY = "your_gemini_key"
    PERPLEXITY_API_KEY = "your_perplexity_key"
    GROQ_API_KEY = "your_groq_key"
+   ```
 
 5. **Run the Streamlit application:**
-   streamlit run app.py
+   ```sh
+   streamlit run app.py.git
+   ```
 
 ---
 
