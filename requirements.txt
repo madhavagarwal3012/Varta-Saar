@@ -3,8 +3,10 @@ openai
 google-generativeai
 scikit-learn
 requests
-yt-dlp
+yt-dlp>=2024.08.06
 pydub
 xhtml2pdf
 bertopic
 groq
+deno
+ffmpeg
