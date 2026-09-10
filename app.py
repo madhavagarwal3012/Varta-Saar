@@ -12,8 +12,7 @@ import yt_dlp
 import subprocess
 import shutil
 from openai import OpenAI
-from groq import Groq
-from huggingface_hub import InferenceClient
+from groq import Groq  # <--- Added Groq import
 from bertopic import BERTopic
 import google.generativeai as genai
 from sklearn.feature_extraction.text import CountVectorizer
@@ -27,27 +26,23 @@ st.set_page_config(
     page_icon="🤖",
 )
 
-# Safe Configuration Loading (No crash on missing keys)
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", "")
-GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "")
-PERPLEXITY_API_KEY = st.secrets.get("PERPLEXITY_API_KEY", "")
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "")
-HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY", "")
-ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY") or st.secrets.get("ASSEMBLYAI_API_KEY", "")
+# Safe API Key retrieval with fallback warnings instead of crashing
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+PERPLEXITY_API_KEY = st.secrets.get("PERPLEXITY_API_KEY") or os.getenv("PERPLEXITY_API_KEY")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+ASSEMBLYAI_API_KEY = st.secrets.get("ASSEMBLYAI_API_KEY") or os.getenv("ASSEMBLYAI_API_KEY")
 
 if not ASSEMBLYAI_API_KEY:
-    st.warning("AssemblyAI API key not found. Transcription services will fail until configured.")
+    st.error("AssemblyAI API key not found. Please set it in your Streamlit secrets to enable transcription.")
+    st.stop()
 
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
-hf_client = InferenceClient(api_key=HUGGINGFACE_API_KEY) if HUGGINGFACE_API_KEY else None
 
 if GEMINI_API_KEY:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        google_client = genai.GenerativeModel("gemini-1.5-flash")
-    except Exception:
-        google_client = None
+    genai.configure(api_key=GEMINI_API_KEY)
+    google_client = genai.GenerativeModel("gemini-1.5-flash")
 else:
     google_client = None
 
@@ -59,9 +54,6 @@ def get_audio_url(file_path):
     """
     Uploads a local file to a transcription service for processing.
     """
-    if not ASSEMBLYAI_API_KEY:
-        st.error("AssemblyAI API Key is missing. Cannot upload audio.")
-        st.stop()
     headers = {'authorization': ASSEMBLYAI_API_KEY}
     response = requests.post(
         'https://api.assemblyai.com/v2/upload',
@@ -91,9 +83,6 @@ def transcribe_audio(audio_url):
     """
     Sends an audio URL for transcription with language detection enabled.
     """
-    if not ASSEMBLYAI_API_KEY:
-        st.error("AssemblyAI API Key is missing.")
-        st.stop()
     headers = {'authorization': ASSEMBLYAI_API_KEY, 'content-type': 'application/json'}
     data = {
         "audio_url": audio_url,
@@ -140,89 +129,90 @@ def get_transcription_result(transcript_id):
 
 def get_summary_model_1(text):
     """
-    Generates a summary using Perplexity (or falls back to Groq/HuggingFace if missing).
+    Generates a summary using Perplexity AI.
     """
-    if PERPLEXITY_API_KEY:
-        headers = {
-            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        data = {
-            "model": "llama-3.1-sonar-huge-128k-online",
-            "messages": [
-                {"role": "system", "content": "You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the meeting transcript."},
-                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
-            ],
-            "temperature": 0.2
-        }
-        try:
-            response = requests.post("https://api.perplexity.ai/chat/completions", headers=headers, json=data)
-            response.raise_for_status()
-            result = response.json()
-            return result['choices'][0]['message']['content']
-        except Exception:
-            pass
-            
-    # Fallback to Groq if Perplexity is missing or expired
-    if groq_client:
-        try:
-            completion = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": "You are an expert meeting summarizer."},
-                    {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
-                ]
-            )
-            return completion.choices[0].message.content
-        except Exception:
-            pass
-            
-    return ""
+    if not PERPLEXITY_API_KEY:
+        return ""
+    headers = {
+        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    data = {
+        "model": "llama-3.1-sonar-huge-128k-online",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the meeting transcript."
+            },
+            {
+                "role": "user",
+                "content": f"Please summarize the following meeting transcript:\n\n{text}"
+            }
+        ],
+        "temperature": 0.2
+    }
+    try:
+        response = requests.post(
+            "https://api.perplexity.ai/chat/completions",
+            headers=headers,
+            json=data
+        )
+        response.raise_for_status()
+        result = response.json()
+        return result['choices'][0]['message']['content']
+    except requests.exceptions.RequestException as e:
+        return ""
 
 def get_summary_model_2(text):
     """
-    Generates a summary using OpenAI (or falls back to Hugging Face if missing/expired).
+    Generates a summary using OpenAI.
     """
-    if openai_client:
-        try:
-            completion = openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the meeting transcript."},
-                    {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
-                ]
-            )
-            return completion.choices[0].message.content
-        except Exception:
-            pass
-            
-    # Fallback to Hugging Face Inference API
-    if hf_client:
-        try:
-            response = hf_client.chat_completion(
-                model="mistralai/Mistral-7B-Instruct-v0.2",
-                messages=[{"role": "user", "content": f"Summarize this meeting transcript concisely:\n\n{text}"}],
-                max_tokens=500
-            )
-            return response.choices[0].message.content
-        except Exception:
-            pass
-            
-    return ""
+    if not openai_client:
+        return ""
+    try:
+        completion = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the meeting transcript."},
+                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
+            ]
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return ""
 
 def get_summary_model_3(text):
     """
     Generates a summary using Gemini.
     """
-    if google_client:
-        try:
-            response = google_client.generate_content(
-                f"You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the following meeting transcript:\n\n{text}"
-            )
-            return response.text
-        except Exception:
-            pass
-    return ""
+    if not google_client:
+        return ""
+    try:
+        response = google_client.generate_content(
+            f"You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the following meeting transcript:\n\n{text}"
+        )
+        return response.text
+    except Exception as e:
+        return ""
+
+def get_summary_model_groq(text):
+    """
+    Generates a summary using Groq AI (Ultra-fast Llama 3 model).
+    """
+    if not groq_client:
+        return ""
+    try:
+        completion = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the meeting transcript."},
+                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
+            ],
+            temperature=0.2
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return ""
 
 def perform_topic_modeling(docs):
     """
@@ -277,6 +267,7 @@ def generate_pdf_report(report_data):
             "summary_1": clean_text(report_data['summary_1']),
             "summary_2": clean_text(report_data['summary_2']),
             "summary_3": clean_text(report_data['summary_3']),
+            "summary_groq": clean_text(report_data.get('summary_groq', '')),
             "diarization": clean_text(report_data['diarization']),
             "sentiment": clean_text(report_data['sentiment']),
             "topics": [{"topic": clean_text(t['topic']), "count": t['count'], "keywords": clean_text(t['keywords'])} for t in report_data['topics']]
@@ -311,12 +302,14 @@ def generate_pdf_report(report_data):
 
                 <div class="section">
                     <h2>AI Model Summaries</h2>
-                    <h3>Summary from AI Model 1</h3>
+                    <h3>Summary from Perplexity</h3>
                     <pre>{report_data_cleaned['summary_1']}</pre>
-                    <h3>Summary from AI Model 2</h3>
+                    <h3>Summary from OpenAI</h3>
                     <pre>{report_data_cleaned['summary_2']}</pre>
-                    <h3>Summary from AI Model 3</h3>
+                    <h3>Summary from Gemini</h3>
                     <pre>{report_data_cleaned['summary_3']}</pre>
+                    <h3>Summary from Groq AI</h3>
+                    <pre>{report_data_cleaned['summary_groq']}</pre>
                 </div>
 
                 <div class="section">
@@ -344,7 +337,10 @@ def generate_pdf_report(report_data):
         """
 
         pdf_buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(pdf_content, dest=pdf_buffer)
+        pisa_status = pisa.CreatePDF(
+            pdf_content,
+            dest=pdf_buffer
+        )
 
         if pisa_status.err:
             raise Exception("PDF generation failed.")
@@ -354,6 +350,8 @@ def generate_pdf_report(report_data):
 
         return f'<a href="data:application/pdf;base64,{b64_pdf}" download="meeting_report.pdf">Download Report as PDF</a>'
     except Exception as e:
+        st.warning("An error occurred while generating the full PDF report. A simplified version has been created instead.")
+
         fallback_content = f"""
             <html>
             <head><title>Simplified Meeting Report</title></head>
@@ -364,10 +362,15 @@ def generate_pdf_report(report_data):
             </body>
             </html>
         """
+
         fallback_buffer = io.BytesIO()
-        pisa.CreatePDF(fallback_content, dest=fallback_buffer)
+        pisa_status = pisa.CreatePDF(
+            fallback_content,
+            dest=fallback_buffer
+        )
         fallback_buffer.seek(0)
         b64_pdf_fallback = base64.b64encode(fallback_buffer.read()).decode('utf-8')
+
         return f'<a href="data:application/pdf;base64,{b64_pdf_fallback}" download="simplified_report.pdf">Download Simplified Report as PDF</a>'
 
 # =========================================================================
@@ -375,6 +378,9 @@ def generate_pdf_report(report_data):
 # =========================================================================
 
 def run_full_pipeline(file_path, meeting_topic):
+    """
+    Runs the full analysis pipeline from transcription to report generation.
+    """
     st.markdown("---")
     st.header("Detailed Analysis 📊")
 
@@ -393,18 +399,18 @@ def run_full_pipeline(file_path, meeting_topic):
             st.info(f"Detected language: **{detected_language}**")
 
             if detected_language != 'en' and google_client:
-                with st.spinner(f"Translating transcript from {detected_language} to English..."):
+                with st.spinner(f"Translating the transcript from {detected_language} to English..."):
                     try:
                         translation_response = google_client.generate_content(
                             f"Translate the following text into English:\n\n{raw_transcript}"
                         )
                         raw_transcript = translation_response.text
                         st.success("Translation complete!")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        st.warning(f"Translation failed: {e}. Proceeding with original transcript.")
 
             if not raw_transcript or len(raw_transcript.strip()) == 0:
-                st.error("The transcription returned an empty transcript.")
+                st.error("The transcription failed or returned an empty transcript. Please check your API key and try a video with clear speech.")
                 return 
 
             diarization_output = ""
@@ -413,11 +419,18 @@ def run_full_pipeline(file_path, meeting_topic):
                 for utterance in utterances_list:
                     start_time = format_time(utterance.get('start', 0))
                     translated_text = utterance['text']
+                    if detected_language != 'en' and google_client:
+                        try:
+                            translated_text = google_client.generate_content(
+                                f"Translate the following into English:\n\n{utterance['text']}"
+                            ).text
+                        except Exception:
+                            pass
                     diarization_output += f"[{start_time}] Speaker {utterance['speaker']}: {translated_text}\n"
                 st.markdown("### Speaker Diarization")
                 st.text_area("Transcript with Speakers", diarization_output, height=200)
             else:
-                st.warning("No speaker diarization data returned.")
+                st.warning("No speaker diarization data was returned by the transcription service.")
                 diarization_output = "No speaker data available."
             
             if 'sentiment_analysis_results' in transcript_dict and transcript_dict['sentiment_analysis_results']:
@@ -441,7 +454,8 @@ def run_full_pipeline(file_path, meeting_topic):
                     try:
                         topics = perform_topic_modeling(docs_for_topic_modeling)
                         st.json(topics)
-                    except Exception:
+                    except Exception as e:
+                        st.warning("Topic modeling could not be completed.")
                         topics = [{"topic": "Topic modeling failed", "count": 0, "keywords": ""}]
                 else:
                     topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
@@ -449,32 +463,38 @@ def run_full_pipeline(file_path, meeting_topic):
                 topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
 
             st.subheader("2. AI-Powered Summaries")
-            with st.spinner("Generating summaries with multiple AI models..."):
+            with st.spinner("Generating summaries with multiple AI models... (including Groq)"):
                 summary_1 = get_summary_model_1(raw_transcript)
                 summary_2 = get_summary_model_2(raw_transcript)
                 summary_3 = get_summary_model_3(raw_transcript)
+                summary_groq = get_summary_model_groq(raw_transcript)
             
             st.success("Summaries generated!")
+            st.markdown("### Consolidated Summary")
             
             consolidated_summary_list = []
             if summary_1:
-                st.markdown("### Summary from Model 1")
-                st.text_area("Summary from Model 1", summary_1, height=150)
+                st.markdown("### Summary from Perplexity")
+                st.text_area("Summary from Perplexity", summary_1, height=130)
                 consolidated_summary_list.append(summary_1)
             if summary_2:
-                st.markdown("### Summary from Model 2")
-                st.text_area("Summary from Model 2", summary_2, height=150)
+                st.markdown("### Summary from OpenAI")
+                st.text_area("Summary from OpenAI", summary_2, height=130)
                 consolidated_summary_list.append(summary_2)
             if summary_3:
-                st.markdown("### Summary from Model 3")
-                st.text_area("Summary from Model 3", summary_3, height=150)
+                st.markdown("### Summary from Gemini")
+                st.text_area("Summary from Gemini", summary_3, height=130)
                 consolidated_summary_list.append(summary_3)
+            if summary_groq:
+                st.markdown("### Summary from Groq AI")
+                st.text_area("Summary from Groq", summary_groq, height=130)
+                consolidated_summary_list.append(summary_groq)
 
             if consolidated_summary_list:
                 consolidated_summary = "\n\n".join(consolidated_summary_list)
-                st.text_area("Final Consolidated Summary", consolidated_summary, height=300)
+                st.text_area("Final Consolidated Summary", consolidated_summary, height=250)
             else:
-                consolidated_summary = "All AI models failed to generate a summary. Please check your API configurations."
+                consolidated_summary = "All AI models failed or were missing API keys. Please check your configurations."
                 st.error(consolidated_summary)
 
             st.markdown("---")
@@ -487,6 +507,7 @@ def run_full_pipeline(file_path, meeting_topic):
                 "summary_1": summary_1,
                 "summary_2": summary_2,
                 "summary_3": summary_3,
+                "summary_groq": summary_groq,
                 "diarization": diarization_output,
                 "sentiment": dominant_sentiment.capitalize(),
                 "topics": topics
@@ -497,8 +518,14 @@ def run_full_pipeline(file_path, meeting_topic):
             st.error("Transcription failed to return a valid result.")
             return None
             
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Failed to transcribe audio: HTTP Error {e.response.status_code}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        st.error("A network connection issue occurred during transcription.")
+        return None
     except Exception as e:
-        st.error(f"An unexpected error occurred during pipeline execution: {e}")
+        st.error(f"An unexpected error occurred during transcription: {e}")
         return None
 
 # =========================================================================
@@ -511,12 +538,12 @@ st.markdown("---")
 
 tab_upload, tab_youtube = st.tabs(["Upload File", "YouTube URL"])
 with tab_upload:
-    meeting_topic = st.text_input("Meeting Topic", placeholder="e.g., Q3 Marketing Strategy Review")
+    meeting_topic = st.text_input("Meeting Topic", placeholder="e.g., Q3 Marketing Strategy Review", key="upload_topic")
     uploaded_file = st.file_uploader(
         "Upload Meeting Audio/Video (.mp3, .m4a, .mp4, .mov)",
         type=["mp3", "m4a", "mp4", "mov"]
     )
-    if st.button("Generate Report"):
+    if st.button("Generate Report", key="upload_button"):
         if not uploaded_file or not meeting_topic:
             st.error("Please provide both a file and a meeting topic.")
             st.stop()
@@ -544,8 +571,6 @@ with tab_upload:
                 st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
                 if os.path.exists(audio_path):
                     os.remove(audio_path)
-                if os.path.exists(output_audio_path):
-                    os.remove(output_audio_path)
                 st.stop()
             except FileNotFoundError:
                 st.error("FFmpeg not found. Please ensure it is in your packages.txt file.")
@@ -564,7 +589,7 @@ with tab_youtube:
     st.subheader("YouTube URL 🔗")
     input_url = st.text_input("Enter a YouTube video URL or a direct audio URL (.mp3, .m4a)")
     cookies_file = st.file_uploader("Upload your cookies.txt file (for restricted videos)", type=["txt"])
-    meeting_topic_url = st.text_input("Enter the main topic of the content", placeholder="e.g., Apple WWDC Keynote")
+    meeting_topic_url = st.text_input("Enter the main topic of the content", placeholder="e.g., Apple WWDC Keynote", key="yt_topic")
 
     if st.button("Generate Report 🚀", key="url_button"):
         if not input_url or not meeting_topic_url:
@@ -602,11 +627,11 @@ with tab_youtube:
                         info_dict = ydl.extract_info(input_url, download=False)
                         ydl.download([input_url])
                 except Exception as e:
-                    st.error(f"An error occurred during download: {e}")
+                    st.error(f"An unexpected error occurred during download: {e}")
                     st.stop()
 
                 if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
-                    st.error("Video download failed. The video may be restricted.")
+                    st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
                     st.stop()
 
                 st.info("Extracting audio from the video...")
@@ -636,9 +661,19 @@ with tab_youtube:
                 st.error("Download or extraction failed. Resulting audio file is empty.")
                 st.stop()
                 
-            st.success("File check passed! Proceeding with transcription.")
-            run_full_pipeline(audio_path, meeting_topic_url)
+            st.info("Verifying file integrity...")
+            integrity_check_command = ['ffmpeg', '-v', 'error', '-i', audio_path, '-f', 'null', '-']
+            result = subprocess.run(integrity_check_command, capture_output=True, text=True)
 
+            if result.returncode == 0:
+                st.success("File integrity check passed! Proceeding with transcription.")
+                run_full_pipeline(audio_path, meeting_topic_url)
+            else:
+                st.error("The downloaded or extracted audio file is corrupted or in an invalid format.")
+                st.stop()
+
+        except subprocess.CalledProcessError as e:
+            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
         finally:
