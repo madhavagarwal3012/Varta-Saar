@@ -768,30 +768,21 @@ with tab_youtube:
             st.stop()
 
         video_path = tempfile.mktemp(suffix=".mp4")
-        audio_path = tempfile.mktemp(suffix=".mp3")
+        audio_path = None
         cookies_path = None
 
         try:
             if "youtube.com" in input_url or "youtu.be" in input_url:
-                st.info("YouTube URL detected. Fetching media stream...")
+                st.info("YouTube URL detected. Downloading video...")
 
-                # Optimized yt-dlp configuration to bypass 403 Forbidden on cloud servers
                 ydl_opts = {
-                    'format': 'bestaudio/best[height<=720]/best',
+                    'format': 'best[height<=720]/best',
                     'outtmpl': video_path,
                     'noplaylist': True,
-                    'ignoreerrors': False,
-                    'quiet': True,
-                    'no_warnings': True,
-                    'geo_bypass': True,
-                    'nocheckcertificate': True,
-                    'http_headers': {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-                    },
+                    'ignoreerrors': True,
                     'extractor_args': {
                         'youtube': {
-                            'player_client': ['mweb', 'android_vr', 'web_creator', 'tv_embedded'],
-                            'skip': ['dash', 'hls']
+                            'player_client': ['android', 'web']
                         }
                     }
                 }
@@ -804,6 +795,7 @@ with tab_youtube:
 
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info_dict = ydl.extract_info(input_url, download=False)
                         ydl.download([input_url])
                 except Exception as e:
                     st.error(f"An unexpected error occurred during download: {e}")
@@ -814,9 +806,9 @@ with tab_youtube:
                     st.stop()
 
                 st.info("Extracting audio from the video...")
+                audio_path = tempfile.mktemp(suffix=".mp3")
                 command = [
                     'ffmpeg',
-                    '-y',
                     '-i', video_path,
                     '-vn',
                     '-q:a', '0',
@@ -826,13 +818,14 @@ with tab_youtube:
 
             elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
                 st.info("Direct audio URL detected. Downloading file...")
-                response = requests.get(input_url, stream=True, timeout=30)
+                response = requests.get(input_url, stream=True)
                 response.raise_for_status()
+                audio_path = tempfile.mktemp(suffix=".mp3")
                 with open(audio_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=16384):
+                    for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
             else:
-                st.error("Invalid URL provided. Please enter a valid YouTube or direct audio URL.")
+                st.error("Invalid URL provided.")
                 st.stop()
 
             if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
@@ -859,8 +852,6 @@ with tab_youtube:
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
-            if cookies_path and os.path.exists(cookies_path):
-                os.remove(cookies_path)
 
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
