@@ -246,13 +246,13 @@ FONT_NAME = 'Helvetica'
 FONT_BOLD = 'Helvetica-Bold'
 
 try:
-    if os.path.exists("Trebuchet MS.ttf"):
+    if os.path.exists("Trebuchet MS.ttf") and os.path.exists("Trebuchet MS Bold.ttf"):
         pdfmetrics.registerFont(TTFont('TrebuchetMS', 'Trebuchet MS.ttf'))
+        pdfmetrics.registerFont(TTFont('TrebuchetMS-Bold', 'Trebuchet MS Bold.ttf'))
         FONT_NAME = 'TrebuchetMS'
-        FONT_BOLD = 'TrebuchetMS'
+        FONT_BOLD = 'TrebuchetMS-Bold'
 except Exception:
     pass
-    
 def generate_pdf_report(report_data):
     try:
         pdf_buffer = io.BytesIO()
