@@ -42,35 +42,9 @@ To eliminate single-model bias and hallucinations, Varta-Saar queries an ensembl
 
 ## 🏗️ System Architecture Pipeline
 
-┌─────────────────────────┐
-│ Audio / Video / YouTube │
-└────────────┬────────────┘
-             │
-             ▼
-   [ FFmpeg Processing ] (Formats to 192kbps MP3 / Verifies File Integrity)
-             │
-             ▼
-   [ AssemblyAI Engine ] (Transcribes, Detects Language, Tags Speakers, Evaluates Sentiment)
-             │
-             ▼
-   [ BERTopic Modeling ] (Clustering & Key-Phrase Extraction)
-             │
-             ▼
- ┌────────────────────────────────────────────────────────┐
- │            Multi-AI Synthesis Engine                   │
- │ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐ │
- │ │  Perplexity  │ │ OpenAI GPT-4 │ │  Google Gemini   │ │
- │ └──────────────┘ └──────────────┘ └──────────────────┘ │
- └───────────────────────────┬────────────────────────────┘
-                             │
-                             ▼
- ┌────────────────────────────────────────────────────────┐
- │               Cleaned Executive Report                 │
- │      (Consolidated Insights + Speaker Logs)            │
- └───────────────────────────┬────────────────────────────┘
-                             │
-                             ▼
-               [ ReportLab PDF Generator ]
+<p align="center">
+  <img src="https://mermaid.ink/img/pako:eNqNU02P2jAQ_SsjH3pp2EKAJeRQiY-AUEFFC6rUhj2YZDDWJnbqj13osv-9ExCou6f6EMcevzdv3tivLNM5spjtCv2S7blxsB5vzEYBjUE68LnU8AV-yBzr-af2a79FmKnKu0doNL7CMJ1MygoFLI3O0FqpxOOVYFifOLX64dO2srBYtmsqNHIn0RKHQ2GkO55glA6sxXJbHAczSJSQCm8cozPH2nBlMyO3aAMYo8PMWZhzJTwXGMCaCwurCvkTGjqQPPPCc0dJVqicLOlzgnE6TB7WupIZLKjm4l-h43OSUeGtI3lKwCf4hsfGcm-4RUgOzvDMSa1OkKQLXzjZIKGro3J7tNJ-lHydrd8Kw6s9JPAfqHokrXSJpirwQL7AYPY-GKbfK1TEMV2uGx39PthOp1qLAmGKpVTyfbCTTo3-DfOCl7zRvsVQ5R81J-emTtJRgVxhTrVj5p18RnjASht3w04ulmlldSFzMjunjlop9tSYz9dewFwLe4JpegHP-RaW4wlJVGi40-aRBYzuQM5iZzwGrERT8nrJXussG0ZWlbhhMf3muONk4oZt1BvBKq5-aV1ekUZ7sWfxjheWVr6qFY0lJ__L266hetGMtFeOxe3mmYPFr-zA4jDs30XN3n2r1bpvRvdhFAbsSNvRXb_d60TdZj_stfrNbvQWsD_ntM27qNcNGOaS6lhcHtH5Lb39BbZkES0" alt="System Architecture Diagram" width="40%"/>
+</p>
 
 ---
 
