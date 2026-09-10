@@ -241,17 +241,21 @@ def clean_for_reportlab(text):
     text = re.sub(r'#{1,6}\s*', '', text)
     return text
 
-# Register Trebuchet MS (uses Windows/Linux standard system path or clean fallback)
 try:
-    pdfmetrics.registerFont(TTFonts('TrebuchetMS', 'trebuc.ttf'))
-    pdfmetrics.registerFont(TTFonts('TrebuchetMS-Bold', 'trebucbd.ttf'))
+    font_url = "https://github.com/fogAndWhisky/TestCodeRepo/raw/master/src/fonts/Trebuchet%20MS.ttf"
+    response = requests.get(font_url)
+    response.raise_for_status()
+    
+    font_buffer = io.BytesIO(response.content)
+    pdfmetrics.registerFont(TTFonts('TrebuchetMS', font_buffer))
+    
     FONT_NAME = 'TrebuchetMS'
-    FONT_BOLD = 'TrebuchetMS-Bold'
-except:
-    # Safe fallback if system file isn't directly bound in cloud runtime
+    FONT_BOLD = 'TrebuchetMS' # Fallback to same face if bold variant link isn't separate
+except Exception as e:
+    # Fallback to standard Helvetica if network/font registration fails
     FONT_NAME = 'Helvetica'
     FONT_BOLD = 'Helvetica-Bold'
-
+    
 def generate_pdf_report(report_data):
     try:
         pdf_buffer = io.BytesIO()
