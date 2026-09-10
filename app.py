@@ -128,75 +128,51 @@ def get_transcription_result(transcript_id):
         time.sleep(1)
 
 def get_summary_model_1(text):
-    """Generates a summary using Perplexity AI."""
-    if not PERPLEXITY_API_KEY:
-        return ""
-    headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    data = {
-        "model": "sonar", # Updated to current standard Perplexity model name
-        "messages": [
-            {"role": "system", "content": "You are an expert meeting summarizer."},
-            {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
-        ],
-        "temperature": 0.2
-    }
+    if not PERPLEXITY_API_KEY: return ""
+    headers = {"Authorization": f"Bearer {PERPLEXITY_API_KEY}", "Content-Type": "application/json"}
+    data = {"model": "sonar", "messages": [{"role": "user", "content": f"Summarize:\n\n{text}"}], "temperature": 0.2}
     try:
-        response = requests.post("https://api.perplexity.ai/chat/completions", headers=headers, json=data)
-        response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
+        res = requests.post("https://api.perplexity.ai/chat/completions", headers=headers, json=data)
+        res.raise_for_status()
+        return res.json()['choices'][0]['message']['content']
     except Exception as e:
-        st.warning(f"Perplexity API Error: {e}")
+        st.warning(f"Perplexity Skipped: {e}")
         return ""
 
 def get_summary_model_2(text):
-    """Generates a summary using OpenAI."""
-    if not openai_client:
-        return ""
+    if not openai_client: return ""
     try:
         completion = openai_client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are an expert meeting summarizer."},
-                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
-            ]
+            messages=[{"role": "user", "content": f"Summarize:\n\n{text}"}]
         )
         return completion.choices[0].message.content
     except Exception as e:
-        st.warning(f"OpenAI API Error: {e}")
+        st.warning(f"OpenAI Skipped (Check billing quota): {e}")
         return ""
 
 def get_summary_model_3(text):
-    """Generates a summary using Gemini."""
-    if not google_client:
-        return ""
+    if not google_client: return ""
     try:
-        response = google_client.generate_content(
-            f"You are an expert meeting summarizer. Provide a professional summary of:\n\n{text}"
-        )
+        # Use standard active Gemini model endpoint
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(f"Summarize:\n\n{text}")
         return response.text
     except Exception as e:
-        st.warning(f"Gemini API Error: {e}")
+        st.warning(f"Gemini Skipped: {e}")
         return ""
 
 def get_summary_model_groq(text):
-    """Generates a summary using Groq AI."""
-    if not groq_client:
-        return ""
+    if not groq_client: return ""
     try:
         completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "You are an expert meeting summarizer."},
-                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
-            ],
+            model="llama-3.1-70b-versatile",  # Updated to stable Groq model string
+            messages=[{"role": "user", "content": f"Summarize:\n\n{text}"}],
             temperature=0.2
         )
         return completion.choices[0].message.content
     except Exception as e:
-        st.warning(f"Groq API Error: {e}")
+        st.warning(f"Groq Skipped: {e}")
         return ""
 
 def perform_topic_modeling(docs):
