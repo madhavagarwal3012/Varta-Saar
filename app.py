@@ -231,21 +231,23 @@ def format_time(ms):
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
 def clean_for_reportlab(text):
-    """Deeply sanitizes markdown symbols and fixes XML/HTML break tags for ReportLab."""
+    """Deeply sanitizes unicode dashes, markdown symbols, and fixes XML break tags."""
     if not text:
         return ""
-    # Strip markdown headers and stray triple/double asterisks
+    
+    # Replace non-standard unicode dashes that trigger square/box missing-glyph symbols
+    text = text.replace('–', '-').replace('—', '-').replace('■', ' ').replace('\ufffd', '-')
+    
+    # Strip raw markdown header markers and stray triple asterisks
     text = re.sub(r'#{1,6}\s*', '', text)
     text = re.sub(r'\*{3}', '', text)
     
-    # Clean up bullet list formatting for ReportLab compatibility
+    # Standardize list bullets
     text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
     
-    # Force all variations of break tags to be strictly self-closing <br/>
+    # Ensure XML break tags are strictly self-closing for ReportLab's parser
     text = re.sub(r'<br\s*/?>', '<br/>', text, flags=re.IGNORECASE)
     
-    # Replace broken control characters
-    text = text.replace('\ufffd', '-').replace('■', ' ')
     return text
 
 # Register Trebuchet MS from local root directory
