@@ -555,17 +555,22 @@ def run_full_pipeline(file_path, meeting_topic):
             st.markdown("---")
             st.header("Full Report 📋")
             
+            cleaned_consolidated = format_summary_with_llm(consolidated_summary)
+            cleaned_s1 = format_summary_with_llm(summary_1)
+            cleaned_s2 = format_summary_with_llm(summary_2)
+            cleaned_s3 = format_summary_with_llm(summary_3)
+            cleaned_groq = format_summary_with_llm(summary_groq)
+            
             report_data = {
                 "date": time.strftime("%Y-%m-%d"),
                 "topic": meeting_topic,
-                "consolidated_summary": consolidated_summary,
-                "summary_1": summary_1,
-                "summary_2": summary_2,
-                "summary_3": summary_3,
-                "summary_groq": summary_groq,
+                "consolidated_summary": cleaned_consolidated,
+                "summary_1": cleaned_s1,
+                "summary_2": cleaned_s2,
+                "summary_3": cleaned_s3,
+                "summary_groq": cleaned_groq,
                 "diarization": diarization_output,
-                "sentiment": dominant_sentiment.capitalize(),
-                "topics": topics
+                "sentiment": dominant_sentiment.capitalize()
             }
             
             st.markdown(generate_pdf_report(report_data), unsafe_allow_html=True)
