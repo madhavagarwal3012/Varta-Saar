@@ -8,3 +8,4 @@ pydub
 xhtml2pdf
 bertopic
 groq
+TTFonts
