@@ -12,34 +12,45 @@ import yt_dlp
 import subprocess
 import shutil
 from openai import OpenAI
+from groq import Groq
+from huggingface_hub import InferenceClient
 from bertopic import BERTopic
 import google.generativeai as genai
 from sklearn.feature_extraction.text import CountVectorizer
 from xhtml2pdf import pisa
 
 # =========================================================================
-# === STEP 1: CONFIGURATION AND API CLIENT SETUP (Backend Handling) =======
+# === STEP 1: CONFIGURATION AND API CLIENT SETUP (Graceful Degradation) ===
 # =========================================================================
 st.set_page_config(
     page_title="Varta-Saar: The Ultimate AI Meeting Assistant",
     page_icon="🤖",
 )
-try:
-    OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-    PERPLEXITY_API_KEY = st.secrets["PERPLEXITY_API_KEY"]
-    ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY") or st.secrets["ASSEMBLYAI_API_KEY"]
-    if not ASSEMBLYAI_API_KEY:
-        st.error("AssemblyAI API key not found. Please set it in your Streamlit secrets.")
-        st.stop()
 
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    genai.configure(api_key=GEMINI_API_KEY)
-    google_client = genai.GenerativeModel("gemini-1.5-flash")
+# Safely load keys from st.secrets or os.getenv without crashing the app
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+PERPLEXITY_API_KEY = st.secrets.get("PERPLEXITY_API_KEY") or os.getenv("PERPLEXITY_API_KEY")
+GROQ_API_KEY = st.secrets.get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
+HUGGINGFACE_API_KEY = st.secrets.get("HUGGINGFACE_API_KEY") or os.getenv("HUGGINGFACE_API_KEY")
+ASSEMBLYAI_API_KEY = st.secrets.get("ASSEMBLYAI_API_KEY") or os.getenv("ASSEMBLYAI_API_KEY")
 
-except KeyError as e:
-    st.error(f"Missing API key. Please ensure you have configured all required API keys in your Streamlit secrets.")
-    st.stop()
+# Initialize Clients conditionally so missing/expired keys won't trigger hard crash screens
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+hf_client = InferenceClient(api_key=HUGGINGFACE_API_KEY) if HUGGINGFACE_API_KEY else None
+
+if GEMINI_API_KEY:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        google_client = genai.GenerativeModel("gemini-1.5-flash")
+    except Exception:
+        google_client = None
+else:
+    google_client = None
+
+if not ASSEMBLYAI_API_KEY:
+    st.warning("⚠️ AssemblyAI API key not found. Audio transcription features will be limited or disabled.")
 
 # =========================================================================
 # === STEP 2: HELPER FUNCTIONS ============================================
@@ -49,6 +60,9 @@ def get_audio_url(file_path):
     """
     Uploads a local file to a transcription service for processing.
     """
+    if not ASSEMBLYAI_API_KEY:
+        st.error("AssemblyAI API key is missing. Cannot upload audio for transcription.")
+        st.stop()
     headers = {'authorization': ASSEMBLYAI_API_KEY}
     response = requests.post(
         'https://api.assemblyai.com/v2/upload',
@@ -76,13 +90,14 @@ def read_file(file_path, chunk_size):
 
 def transcribe_audio(audio_url):
     """
-    Sends an audio URL for transcription.
+    Sends an audio URL for transcription with language detection enabled.
     """
     headers = {'authorization': ASSEMBLYAI_API_KEY, 'content-type': 'application/json'}
     data = {
         "audio_url": audio_url,
         "speaker_labels": True,
         "sentiment_analysis": True,
+        "language_detection": True
     }
     response = requests.post(
         'https://api.assemblyai.com/v2/transcript',
@@ -95,7 +110,6 @@ def transcribe_audio(audio_url):
         st.error(f"Failed to submit transcription job: {response.status_code}")
         st.json(response.json())
         st.stop()
-        return None
 
 def get_transcription_result(transcript_id):
     """
@@ -124,65 +138,67 @@ def get_transcription_result(transcript_id):
 
 def get_summary_model_1(text):
     """
-    Generates a summary using a powerful language model (Perplexity).
+    Generates a summary using Groq (High Speed & Free Tier). Falls back gracefully.
     """
-    headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    data = {
-        "model": "llama-3.1-sonar-huge-128k-online",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the meeting transcript."
-            },
-            {
-                "role": "user",
-                "content": f"Please summarize the following meeting transcript:\n\n{text}"
-            }
-        ],
-        "temperature": 0.2
-    }
-    try:
-        response = requests.post(
-            "https://api.perplexity.ai/chat/completions",
-            headers=headers,
-            json=data
-        )
-        response.raise_for_status()
-        result = response.json()
-        return result['choices'][0]['message']['content']
-    except requests.exceptions.RequestException as e:
+    if not groq_client:
         return ""
-
-def get_summary_model_2(text):
-    """
-    Generates a summary using a second powerful language model (OpenAI).
-    """
     try:
-        completion = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+        completion = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the meeting transcript."},
+                {"role": "system", "content": "You are an expert meeting summarizer. Provide a concise and professional summary."},
                 {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
-            ]
+            ],
+            temperature=0.2
         )
         return completion.choices[0].message.content
     except Exception as e:
-        return ""
+        return f"[Groq model unavailable/expired: {e}]"
 
-def get_summary_model_3(text):
+def get_summary_model_2(text):
     """
-    Generates a summary using a third powerful language model (Gemini).
+    Generates a summary using Google Gemini. Falls back gracefully.
     """
+    if not google_client:
+        return ""
     try:
         response = google_client.generate_content(
             f"You are an expert meeting summarizer. Your task is to provide a concise and professional summary of the following meeting transcript:\n\n{text}"
         )
         return response.text
     except Exception as e:
-        return ""
+        return f"[Gemini model unavailable/expired: {e}]"
+
+def get_summary_model_3(text):
+    """
+    Generates a summary using OpenAI or Hugging Face Inference API as backup. Falls back gracefully.
+    """
+    if openai_client:
+        try:
+            completion = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are an expert meeting summarizer."},
+                    {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
+                ]
+            )
+            return completion.choices[0].message.content
+        except Exception:
+            pass
+            
+    if hf_client:
+        try:
+            messages = [{"role": "user", "content": f"Summarize this meeting transcript concisely: {text}"}]
+            response = hf_client.chat_completion(
+                model="mistralai/Mistral-7B-Instruct-v0.2",
+                messages=messages,
+                max_tokens=500
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"[Hugging Face model unavailable/expired: {e}]"
+            
+    return ""
 
 def perform_topic_modeling(docs):
     """
@@ -254,10 +270,6 @@ def generate_pdf_report(report_data):
                     pre {{ background-color: #f5f5f5; padding: 10px; border-radius: 5px; white-space: pre-wrap; }}
                     .summary {{ background-color: #e8eaf6; padding: 20px; border-radius: 8px; }}
                     .sentiment {{ font-weight: bold; }}
-                    .positive {{ color: green; }}
-                    .negative {{ color: red; }}
-                    .neutral {{ color: orange; }}
-                    .timestamp {{ color: #666; font-size: 0.9em; }}
                 </style>
             </head>
             <body>
@@ -272,11 +284,11 @@ def generate_pdf_report(report_data):
 
                 <div class="section">
                     <h2>AI Model Summaries</h2>
-                    <h3>Summary from AI Model 1</h3>
+                    <h3>Summary from Groq Model</h3>
                     <pre>{report_data_cleaned['summary_1']}</pre>
-                    <h3>Summary from AI Model 2</h3>
+                    <h3>Summary from Gemini Model</h3>
                     <pre>{report_data_cleaned['summary_2']}</pre>
-                    <h3>Summary from AI Model 3</h3>
+                    <h3>Summary from Backup Model</h3>
                     <pre>{report_data_cleaned['summary_3']}</pre>
                 </div>
 
@@ -287,7 +299,7 @@ def generate_pdf_report(report_data):
 
                 <div class="section">
                     <h2>Sentiment Analysis</h2>
-                    <p>Overall Sentiment: <span class="sentiment {report_data_cleaned['sentiment'].lower()}">{report_data_cleaned['sentiment']}</span></p>
+                    <p>Overall Sentiment: <span class="sentiment">{report_data_cleaned['sentiment']}</span></p>
                 </div>
 
                 <div class="section">
@@ -305,10 +317,7 @@ def generate_pdf_report(report_data):
         """
 
         pdf_buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(
-            pdf_content,
-            dest=pdf_buffer
-        )
+        pisa_status = pisa.CreatePDF(pdf_content, dest=pdf_buffer)
 
         if pisa_status.err:
             raise Exception("PDF generation failed.")
@@ -319,59 +328,18 @@ def generate_pdf_report(report_data):
         return f'<a href="data:application/pdf;base64,{b64_pdf}" download="meeting_report.pdf">Download Report as PDF</a>'
     except Exception as e:
         st.warning("An error occurred while generating the full PDF report. A simplified version has been created instead.")
-
-        fallback_content = f"""
-            <html>
-            <head><title>Simplified Meeting Report</title></head>
-            <body>
-                <h1>Simplified Varta-Saar Meeting Report</h1>
-                <h2>Consolidated Summary</h2>
-                <pre>{clean_text(report_data['consolidated_summary'])}</pre>
-            </body>
-            </html>
-        """
-
+        fallback_content = f"<html><body><h1>Simplified Meeting Report</h1><pre>{clean_text(report_data['consolidated_summary'])}</pre></body></html>"
         fallback_buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(
-            fallback_content,
-            dest=fallback_buffer
-        )
+        pisa.CreatePDF(fallback_content, dest=fallback_buffer)
         fallback_buffer.seek(0)
         b64_pdf_fallback = base64.b64encode(fallback_buffer.read()).decode('utf-8')
-
         return f'<a href="data:application/pdf;base64,{b64_pdf_fallback}" download="simplified_report.pdf">Download Simplified Report as PDF</a>'
-
-def transcribe_audio(audio_url):
-    """
-    Sends an audio URL for transcription with language detection enabled.
-    """
-    headers = {'authorization': ASSEMBLYAI_API_KEY, 'content-type': 'application/json'}
-    data = {
-        "audio_url": audio_url,
-        "speaker_labels": True,
-        "sentiment_analysis": True,
-        "language_detection": True  # NEW: Enable automatic language detection
-    }
-    response = requests.post(
-        'https://api.assemblyai.com/v2/transcript',
-        headers=headers,
-        json=data
-    )
-    if response.status_code == 200:
-        return response.json()['id']
-    else:
-        st.error(f"Failed to submit transcription job: {response.status_code}")
-        st.json(response.json())
-        st.stop()
 
 # =========================================================================
 # === STEP 3: MAIN APPLICATION PIPELINE ===================================
 # =========================================================================
 
 def run_full_pipeline(file_path, meeting_topic):
-    """
-    Runs the full analysis pipeline from transcription to report generation.
-    """
     st.markdown("---")
     st.header("Detailed Analysis 📊")
 
@@ -381,29 +349,24 @@ def run_full_pipeline(file_path, meeting_topic):
             audio_url = get_audio_url(file_path)
             transcript_id = transcribe_audio(audio_url)
             transcript_dict = get_transcription_result(transcript_id)
-            print(transcript_dict) # Keep this for debugging
 
         if 'text' in transcript_dict and transcript_dict['text']:
             st.success("Transcription complete!")
-            
             raw_transcript = transcript_dict.get('text', '')
-            
             detected_language = transcript_dict.get('language_code', 'en')
             st.info(f"Detected language: **{detected_language}**")
 
-            if detected_language != 'en':
+            if detected_language != 'en' and google_client:
                 with st.spinner(f"Translating the transcript from {detected_language} to English..."):
                     try:
-                        translation_response = google_client.generate_content(
-                            f"Translate the following text into English:\n\n{raw_transcript}"
-                        )
+                        translation_response = google_client.generate_content(f"Translate the following text into English:\n\n{raw_transcript}")
                         raw_transcript = translation_response.text
                         st.success("Translation complete!")
-                    except Exception as e:
-                        st.warning(f"Translation failed: {e}. Proceeding with original transcript.")
+                    except Exception:
+                        pass
 
             if not raw_transcript or len(raw_transcript.strip()) == 0:
-                st.error("The transcription failed or returned an empty transcript. Please check your API key and try a video with clear speech.")
+                st.error("The transcription returned an empty text.")
                 return 
 
             diarization_output = ""
@@ -411,20 +374,10 @@ def run_full_pipeline(file_path, meeting_topic):
             if utterances_list:
                 for utterance in utterances_list:
                     start_time = format_time(utterance.get('start', 0))
-                    if detected_language != 'en':
-                        try:
-                            translated_text = google_client.generate_content(
-                                f"Translate the following into English:\n\n{utterance['text']}"
-                            ).text
-                        except Exception:
-                            translated_text = utterance['text']
-                    else:
-                        translated_text = utterance['text']
-                    diarization_output += f"[{start_time}] Speaker {utterance['speaker']}: {translated_text}\n"
+                    diarization_output += f"[{start_time}] Speaker {utterance['speaker']}: {utterance['text']}\n"
                 st.markdown("### Speaker Diarization")
                 st.text_area("Transcript with Speakers", diarization_output, height=200)
             else:
-                st.warning("No speaker diarization data was returned by the transcription service. This may be due to a transcription failure or very short audio.")
                 diarization_output = "No speaker data available."
             
             if 'sentiment_analysis_results' in transcript_dict and transcript_dict['sentiment_analysis_results']:
@@ -435,94 +388,63 @@ def run_full_pipeline(file_path, meeting_topic):
                 st.markdown("### Sentiment Analysis")
                 st.write(f"The overall sentiment of the meeting is: **{dominant_sentiment.capitalize()}**")
             else:
-                st.markdown("### Sentiment Analysis")
-                st.warning("No sentiment analysis data available.")
                 dominant_sentiment = "Not available"
 
             st.markdown("### Key Topics (powered by Topic Modeling)")
-            utterances_for_topics = transcript_dict.get('utterances')
-
-            if utterances_for_topics:
-                docs_for_topic_modeling = [utterance['text'] for utterance in utterances_for_topics]
-
-                if docs_for_topic_modeling:
-                    try:
-                        topics = perform_topic_modeling(docs_for_topic_modeling)
-                        st.json(topics)
-                    except Exception as e:
-                        st.warning("Topic modeling could not be completed. The final report will be generated without this section.")
-                        topics = [{"topic": "Topic modeling failed", "count": 0, "keywords": ""}]
-                else:
-                    topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
-                    st.warning("Not enough data to perform topic modeling. The utterances list was empty.")
+            if utterances_list:
+                docs_for_topic_modeling = [u['text'] for u in utterances_list]
+                try:
+                    topics = perform_topic_modeling(docs_for_topic_modeling)
+                    st.json(topics)
+                except Exception:
+                    topics = [{"topic": "Topic modeling skipped", "count": 0, "keywords": ""}]
             else:
-                topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
-                st.warning("No speaker utterances were returned. This may be due to a transcription failure or very short audio.")
-
-            if 'topics' not in locals():
                 topics = [{"topic": "Not available", "count": 0, "keywords": ""}]
 
             st.subheader("2. AI-Powered Summaries")
-            with st.spinner("Generating summaries with multiple AI models..."):
+            with st.spinner("Generating summaries with available AI models (Groq, Gemini, Backup)..."):
                 summary_1 = get_summary_model_1(raw_transcript)
                 summary_2 = get_summary_model_2(raw_transcript)
                 summary_3 = get_summary_model_3(raw_transcript)
             
-            st.success("Summaries generated!")
-            st.markdown("### Consolidated Summary")
+            st.success("Summaries generation step finished!")
             
-            consolidated_summary_list = []
+            consolidated_summary_list = [s for s in [summary_1, summary_2, summary_3] if s and not s.startswith("[")]
             if summary_1:
-                st.markdown("### Summary from Model 1")
-                st.text_area("Summary from Model 1", summary_1, height=150)
-                consolidated_summary_list.append(summary_1)
+                st.markdown("### Summary from Groq Model")
+                st.text_area("Groq Summary", summary_1, height=120)
             if summary_2:
-                st.markdown("### Summary from Model 2")
-                st.text_area("Summary from Model 2", summary_2, height=150)
-                consolidated_summary_list.append(summary_2)
+                st.markdown("### Summary from Gemini Model")
+                st.text_area("Gemini Summary", summary_2, height=120)
             if summary_3:
-                st.markdown("### Summary from Model 3")
-                st.text_area("Summary from Model 3", summary_3, height=150)
-                consolidated_summary_list.append(summary_3)
+                st.markdown("### Summary from Backup Model")
+                st.text_area("Backup Summary", summary_3, height=120)
 
             if consolidated_summary_list:
                 consolidated_summary = "\n\n".join(consolidated_summary_list)
-                st.text_area("Final Consolidated Summary", consolidated_summary, height=300)
             else:
-                consolidated_summary = "All AI models failed to generate a summary. Please check your API keys and try again."
-                st.error(consolidated_summary)
+                consolidated_summary = "All configured AI model endpoints failed or keys are missing/expired. Please check your credentials."
 
             st.markdown("---")
             st.header("Full Report 📋")
-            
             report_data = {
                 "date": time.strftime("%Y-%m-%d"),
                 "topic": meeting_topic,
                 "consolidated_summary": consolidated_summary,
-                "summary_1": summary_1,
-                "summary_2": summary_2,
-                "summary_3": summary_3,
+                "summary_1": summary_1 or "N/A",
+                "summary_2": summary_2 or "N/A",
+                "summary_3": summary_3 or "N/A",
                 "diarization": diarization_output,
                 "sentiment": dominant_sentiment.capitalize(),
                 "topics": topics
             }
-            
             st.markdown(generate_pdf_report(report_data), unsafe_allow_html=True)
         else:
-            st.error("Transcription failed to return a valid result. The full pipeline cannot be executed.")
-            return None
+            st.error("Transcription failed to return a valid result.")
             
-    except requests.exceptions.HTTPError as e:
-        st.error(f"Failed to transcribe audio: HTTP Error {e.response.status_code}")
-        st.error(f"Error message: {e.response.text}")
-        return None
-    except requests.exceptions.ConnectionError as e: # <--- ADD THIS BLOCK
-        st.error(f"A network connection issue occurred during transcription. Please check your internet connection and try again.")
-        return None
     except Exception as e:
-        st.error(f"An unexpected error occurred during transcription: {e}")
-        return None
-    
+        st.error(f"An unexpected error occurred during execution: {e}")
+
 # =========================================================================
 # === STEP 4: STREAMLIT UI AND LOGIC ======================================
 # =========================================================================
@@ -551,29 +473,12 @@ with tab_upload:
             st.info("Extracting audio from video using FFmpeg...")
             output_audio_path = tempfile.mktemp(suffix=".mp3")
             try:
-                # Direct subprocess call to ffmpeg
-                command = [
-                    'ffmpeg',
-                    '-i', audio_path,
-                    '-vn', # no video
-                    '-acodec', 'libmp3lame', # use libmp3lame for MP3
-                    '-q:a', '2', # audio quality
-                    output_audio_path
-                ]
+                command = ['ffmpeg', '-i', audio_path, '-vn', '-acodec', 'libmp3lame', '-q:a', '2', output_audio_path]
                 subprocess.run(command, check=True, capture_output=True, text=True)
-                os.remove(audio_path) # Clean up original video file
+                os.remove(audio_path)
                 audio_path = output_audio_path
-            except subprocess.CalledProcessError as e:
-                st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                if os.path.exists(output_audio_path):
-                    os.remove(output_audio_path)
-                st.stop()
-            except FileNotFoundError:
-                st.error("FFmpeg not found. Please ensure it is in your packages.txt file.")
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
+            except Exception as e:
+                st.error(f"Failed to extract audio with FFmpeg: {e}")
                 st.stop()
 
         try:
@@ -582,7 +487,6 @@ with tab_upload:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
 
-# --- YouTube URL Tab ---
 with tab_youtube:
     st.subheader("YouTube URL 🔗")
     input_url = st.text_input("Enter a YouTube video URL or a direct audio URL (.mp3, .m4a)")
@@ -594,27 +498,12 @@ with tab_youtube:
             st.error("Please provide a valid URL and a meeting topic.")
             st.stop()
 
-        video_path = None
-        audio_path = None
-        cookies_path = None
-
         video_path = tempfile.mktemp(suffix=".mp4")
+        audio_path = None
 
         try:
             if "youtube.com" in input_url or "youtu.be" in input_url:
-                st.info("YouTube URL detected. Downloading video...")
-
-            # 1. Download the raw video file without using cookies
-                # ydl_opts = {
-                #     'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                #     'outtmpl': video_path,
-                #     'noplaylist': True,
-                #     'ignoreerrors': True,
-                #     'retries': 5, # Added retries
-                #     'fragment-retries': 5, # Added fragment retries
-                #     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', # Added a user agent
-                # }
-
+                st.info("YouTube URL detected. Downloading video via yt-dlp...")
                 ydl_opts = {
                     'format': 'best[height<=720]/best',
                     'outtmpl': video_path,
@@ -626,99 +515,45 @@ with tab_youtube:
                         }
                     }
                 }
-
                 if cookies_file:
-                        cookies_path = tempfile.mktemp(suffix=".txt")
-                        with open(cookies_path, "wb") as f:
-                            f.write(cookies_file.getbuffer())
-                        ydl_opts['cookiefile'] = cookies_path
+                    cookies_path = tempfile.mktemp(suffix=".txt")
+                    with open(cookies_path, "wb") as f:
+                        f.write(cookies_file.getbuffer())
+                    ydl_opts['cookiefile'] = cookies_path
 
-                        
-                try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info_dict = ydl.extract_info(input_url, download=False)
-                        video_filename = ydl.prepare_filename(info_dict)
-                        ydl.download([input_url])
-                    
-                except yt_dlp.utils.DownloadError as e:
-                        st.warning(f"Download failed with a temporary issue (e.g., network error). Please try again later.")
-                        st.stop()
-                except Exception as e:
-                    st.error(f"An unexpected error occurred during download: {e}")
-                    st.stop()
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([input_url])
 
                 if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
-                    st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
-                    st.info("If the video is restricted, please try again with a cookies.txt file.")
+                    st.error("Video download failed. The video may be private or restricted.")
                     st.stop()
 
                 st.info("Extracting audio from the video...")
-                # 2. Use a direct FFmpeg subprocess call to extract the audio
                 audio_path = tempfile.mktemp(suffix=".mp3")
-
-                command = [
-                    'ffmpeg',
-                    '-i', video_path,
-                    '-vn',
-                    '-q:a', '0',
-                    audio_path
-                ]
-
+                command = ['ffmpeg', '-i', video_path, '-vn', '-q:a', '0', audio_path]
                 subprocess.run(command, check=True, capture_output=True, text=True)
-
-            elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
-                st.info("Direct audio URL detected. Downloading file...")
-                
+            else:
                 response = requests.get(input_url, stream=True)
                 response.raise_for_status()
                 audio_path = tempfile.mktemp(suffix=".mp3")
-                
                 with open(audio_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                        
-            else:
-                st.error("Invalid URL provided. The app only supports YouTube video URLs and direct links to audio files (.mp3, .m4a, .wav).")
-                st.stop()
 
-        # --- File Integrity Check using FFmpeg ---
-            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
-                st.error("Download or extraction failed. The resulting audio file is empty.")
-                st.stop()
-                
-            st.info("Verifying file integrity...")
-            integrity_check_command = [
-                'ffmpeg',
-                '-v', 'error',
-                '-i', audio_path,
-                '-f', 'null',
-                '-'
-            ]
-            result = subprocess.run(integrity_check_command, capture_output=True, text=True)
-
-            if result.returncode == 0:
-                st.success("File integrity check passed! Proceeding with transcription.")
+            if os.path.exists(audio_path) and os.path.getsize(audio_path) > 0:
                 run_full_pipeline(audio_path, meeting_topic_url)
             else:
-                st.error("The downloaded or extracted audio file is corrupted or in an invalid format. Cannot proceed.")
-                st.info(f"FFmpeg Error Log: {result.stderr}")
-                st.stop()
-            
-
-        except subprocess.CalledProcessError as e:
-            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
+                st.error("Extracted audio file is empty or missing.")
         except Exception as e:
-            st.error(f"An unexpected error occurred: {e}")
+            st.error(f"An unexpected error occurred during processing: {e}")
         finally:
             if video_path and os.path.exists(video_path):
                 os.remove(video_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
-                
+
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
 # =========================================================================
-
 st.markdown("---")
 st.markdown("© Copyright 2025 by Madhav Agarwal. All rights reserved.")
-
