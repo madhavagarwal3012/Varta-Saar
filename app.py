@@ -458,8 +458,8 @@ def run_full_pipeline(file_path, meeting_topic):
                 consolidated_summary_list.append(summary_groq)
 
             if consolidated_summary_list:
-                final_consolidated_summary = "\n\n".join(consolidated_summary_list)
-                st.markdown(final_consolidated_summary)
+                consolidated_summary = "\n\n".join(consolidated_summary_list)
+                st.markdown(consolidated_summary)
             else:
                 consolidated_summary = "All AI models failed or were missing API keys. Please check your configurations."
                 st.error(consolidated_summary)
