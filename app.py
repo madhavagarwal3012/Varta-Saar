@@ -755,39 +755,43 @@ with tab_upload:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
                 
-def download_youtube_backend_robust(url, output_path, cookies_path=None):
-    """
-    Backend yt-dlp downloader using rotated Innertube client signatures (Android VR & Web Embedded).
-    Bypasses 403 Forbidden errors on cloud hosted instances.
-    """
-    ydl_opts = {
-        'format': 'ba/b',  # Best audio format
-        'outtmpl': output_path.replace('.mp3', '') + '.%(ext)s',
-        'noplaylist': True,
-        'quiet': True,
-        'no_warnings': True,
-        'geo_bypass': True,
-        'nocheckcertificate': True,
-        # Force specific non-restricted player clients
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android_vr', 'web_embedded', 'mweb'],
-                'skip': ['dash', 'hls']
-            }
-        },
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-    }
+def extract_youtube_video_id(url):
+    """Extracts the 11-character video ID from standard YouTube links."""
+    pattern = r'(?:v=|\/|embed\/|shorts\/|youtu\.be\/)([0-9A-Za-z_-]{11})'
+    match = re.search(pattern, url)
+    return match.group(1) if match else None
 
-    if cookies_path and os.path.exists(cookies_path):
-        ydl_opts['cookiefile'] = cookies_path
-
+def get_youtube_transcript(video_id):
+    """Fetches text transcript directly without needing to download audio."""
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        api_response = YouTubeTranscriptApi.get_transcript(video_id)
+        transcript_text = " ".join([item['text'] for item in api_response])
+        return transcript_text
+    except Exception:
+        return None
+
+def download_audio_pytubefix(url, output_path):
+    """Fallback audio extractor using pytubefix (bypasses standard IP blocks)."""
+    try:
+        yt = YouTube(url, client='WEB')
+        audio_stream = yt.streams.filter(only_audio=True).order_by('abr').desc().first()
+        if not audio_stream:
+            return False
+
+        temp_dir = tempfile.gettempdir()
+        downloaded_file = audio_stream.download(output_path=temp_dir, filename="temp_yt")
+
+        # Convert stream to standard MP3
+        ffmpeg_cmd = [
+            'ffmpeg', '-y', '-i', downloaded_file,
+            '-vn', '-ar', '44100', '-ac', '2', '-b:a', '192k',
+            output_path
+        ]
+        subprocess.run(ffmpeg_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        if os.path.exists(downloaded_file):
+            os.remove(downloaded_file)
+
         return os.path.exists(output_path) and os.path.getsize(output_path) > 0
     except Exception:
         return False
@@ -795,31 +799,43 @@ def download_youtube_backend_robust(url, output_path, cookies_path=None):
 # --- YouTube URL Tab ---
 with tab_youtube:
     st.subheader("YouTube URL 🔗")
-    input_url = st.text_input("Enter a YouTube video URL or a direct audio URL (.mp3, .m4a)")
-    cookies_file = st.file_uploader("Upload your cookies.txt file (for restricted videos)", type=["txt"])
-    meeting_topic_url = st.text_input("Enter the main topic of the content", placeholder="e.g., Apple WWDC Keynote", key="yt_topic")
+    input_url = st.text_input("Enter a YouTube video URL or direct audio URL (.mp3, .m4a)")
+    meeting_topic_url = st.text_input("Enter the main topic of the content", placeholder="e.g., IT Job Reality", key="yt_topic")
 
     if st.button("Generate Report 🚀", key="url_button"):
         if not input_url or not meeting_topic_url:
-            st.error("Please provide a valid URL and a meeting topic.")
+            st.error("Please provide both a valid URL and a content topic.")
             st.stop()
 
         audio_path = tempfile.mktemp(suffix=".mp3")
-        cookies_path = None
 
         try:
             if "youtube.com" in input_url or "youtu.be" in input_url:
-                st.info("YouTube URL detected. Extracting audio stream...")
+                video_id = extract_youtube_video_id(input_url)
 
-                if cookies_file:
-                    cookies_path = tempfile.mktemp(suffix=".txt")
-                    with open(cookies_path, "wb") as f:
-                        f.write(cookies_file.getbuffer())
+                if not video_id:
+                    st.error("Invalid YouTube URL format. Please check the link.")
+                    st.stop()
 
-                success = download_youtube_backend_robust(input_url, audio_path, cookies_path)
+                # Approach 1: Try direct API transcript extraction (Fastest & 100% cloud-safe)
+                st.info("Extracting YouTube content...")
+                transcript_text = get_youtube_transcript(video_id)
 
-                if not success:
-                    st.error("YouTube blocked the automated cloud request. Please download the audio file directly or upload a valid cookies.txt file.")
+                if transcript_text:
+                    st.success("Transcript retrieved successfully! Generating report...")
+                    # Update this call to match your LLM/report pipeline function for text
+                    run_report_from_text_pipeline(transcript_text, meeting_topic_url)
+                    st.stop()
+
+                # Approach 2: Fallback to audio download if captions/transcript are unavailable
+                st.warning("Captions unavailable on video. Attempting audio stream extraction...")
+                success = download_audio_pytubefix(input_url, audio_path)
+
+                if success and os.path.exists(audio_path):
+                    st.success("Audio stream retrieved successfully! Running audio pipeline...")
+                    run_full_pipeline(audio_path, meeting_topic_url)
+                else:
+                    st.error("YouTube blocked automated cloud requests for this media stream. Please upload the audio file directly.")
                     st.stop()
 
             elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
@@ -829,32 +845,12 @@ with tab_youtube:
                 with open(audio_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=16384):
                         f.write(chunk)
-            else:
-                st.error("Invalid URL provided. Please enter a valid YouTube or direct audio URL.")
-                st.stop()
 
-            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
-                st.error("Download failed. The audio file could not be stored.")
-                st.stop()
-                
-            st.info("Verifying file integrity with FFmpeg...")
-            integrity_check_command = ['ffmpeg', '-v', 'error', '-i', audio_path, '-f', 'null', '-']
-            result = subprocess.run(integrity_check_command, capture_output=True, text=True)
-
-            if result.returncode == 0:
-                st.success("File integrity check passed! Proceeding with transcription.")
                 run_full_pipeline(audio_path, meeting_topic_url)
-            else:
-                st.error("The extracted audio file is corrupted or in an unsupported format.")
-                st.stop()
 
-        except subprocess.CalledProcessError as e:
-            st.error(f"Failed to process audio with FFmpeg: {e.stderr}")
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
         finally:
-            if cookies_path and os.path.exists(cookies_path):
-                os.remove(cookies_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
 # =========================================================================
