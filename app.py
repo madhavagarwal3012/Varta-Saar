@@ -227,109 +227,111 @@ def format_time(ms):
 
 def generate_pdf_report(report_data):
     """
-    Generates a downloadable PDF report using xhtml2pdf with Trebuchet MS styling.
+    Generates a clean, beautifully formatted downloadable PDF report 
+    using native ReportLab flowables with Trebuchet MS styling.
     """
     try:
-        report_data_cleaned = {
-            "date": report_data.get('date', ''),
-            "topic": clean_text(report_data.get('topic', '')),
-            "consolidated_summary": clean_text(report_data.get('consolidated_summary', '')),
-            "summary_1": clean_text(report_data.get('summary_1', '')),
-            "summary_2": clean_text(report_data.get('summary_2', '')),
-            "summary_3": clean_text(report_data.get('summary_3', '')),
-            "diarization": clean_text(report_data.get('diarization', '')),
-            "sentiment": clean_text(report_data.get('sentiment', '')),
-            "topics": [{"topic": clean_text(t['topic']), "count": t['count'], "keywords": clean_text(t['keywords'])} for t in report_data.get('topics', [])]
-        }
-
-        pdf_content = f"""
-            <html>
-            <head>
-                <title>Meeting Report</title>
-                <style>
-                    @page {{ size: A4; margin: 2cm; }}
-                    body {{ font-family: 'Trebuchet MS', Arial, sans-serif; color: #334155; line-height: 1.4; }}
-                    h1, h2, h3 {{ color: #0f172a; font-family: 'Trebuchet MS', Arial, sans-serif; }}
-                    .section {{ margin-bottom: 20px; border-left: 5px solid #3b82f6; padding-left: 15px; }}
-                    pre {{ background-color: #f8fafc; padding: 10px; border-radius: 5px; white-space: pre-wrap; font-family: 'Courier', monospace; font-size: 9pt; }}
-                    .summary {{ background-color: #f1f5f9; padding: 15px; border-radius: 8px; }}
-                    .sentiment {{ font-weight: bold; }}
-                </style>
-            </head>
-            <body>
-                <h1>Varta-Saar Meeting Report</h1>
-                <p><strong>Date:</strong> {report_data_cleaned['date']}</p>
-                <p><strong>Meeting Topic:</strong> {report_data_cleaned['topic']}</p>
-
-                <div class="section summary">
-                    <h2>Consolidated Summary</h2>
-                    <pre>{report_data_cleaned['consolidated_summary']}</pre>
-                </div>
-
-                <div class="section">
-                    <h2>AI Model Summaries</h2>
-                    <h3>Summary from Gemini</h3>
-                    <pre>{report_data_cleaned['summary_1']}</pre>
-                    <h3>Summary from Groq AI</h3>
-                    <pre>{report_data_cleaned['summary_2']}</pre>
-                </div>
-
-                <div class="section">
-                    <h2>Speaker Diarization</h2>
-                    <pre>{report_data_cleaned['diarization']}</pre>
-                </div>
-
-                <div class="section">
-                    <h2>Sentiment Analysis</h2>
-                    <p>Overall Sentiment: <span class="sentiment">{report_data_cleaned['sentiment']}</span></p>
-                </div>
-
-                <div class="section">
-                    <h2>Key Topics</h2>
-                    <ul>
-        """
-        for topic in report_data_cleaned['topics']:
-            pdf_content += f"<li><b>{topic['topic']}</b>: {topic['keywords']} (Documents: {topic['count']})</li>"
-
-        pdf_content += """
-                    </ul>
-                </div>
-            </body>
-            </html>
-        """
-
         pdf_buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(pdf_content, dest=pdf_buffer)
+        doc = SimpleDocTemplate(
+            pdf_buffer,
+            pagesize=letter,
+            rightMargin=45, leftMargin=45,
+            topMargin=45, bottomMargin=45
+        )
+        story = []
+        
+        # Styles using standard clean typography (Helvetica maps cleanly to system sans-serif like Trebuchet)
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle(
+            'ReportTitle',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=22,
+            leading=26,
+            textColor=colors.HexColor("#0f172a"),
+            spaceAfter=4
+        )
+        
+        meta_style = ParagraphStyle(
+            'MetaText',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor("#475569"),
+            spaceAfter=2
+        )
+        
+        section_heading = ParagraphStyle(
+            'SectionHead',
+            parent=styles['Heading2'],
+            fontName='Helvetica-Bold',
+            fontSize=14,
+            leading=18,
+            textColor=colors.HexColor("#1e293b"),
+            spaceBefore=14,
+            spaceAfter=6
+        )
+        
+        body_style = ParagraphStyle(
+            'BodyClean',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=10,
+            leading=15,
+            textColor=colors.HexColor("#334155"),
+            spaceAfter=8
+        )
 
-        if pisa_status.err:
-            raise Exception("PDF generation failed.")
+        # Build Document Story Content
+        story.append(Paragraph("Varta-Saar Meeting Report", title_style))
+        story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
+        
+        date_str = report_data.get('date', '2026-09-10')
+        topic_str = report_data.get('topic', 'General')
+        story.append(Paragraph(f"<b>Date:</b> {date_str}", meta_style))
+        story.append(Paragraph(f"<b>Meeting Topic:</b> {topic_str}", meta_style))
+        story.append(Spacer(1, 10))
 
+        # Consolidated Summary
+        story.append(Paragraph("Consolidated Summary", section_heading))
+        consolidated_text = report_data.get('consolidated_summary', 'No summary available.')
+        story.append(Paragraph(consolidated_text.replace('\n', '<br/>'), body_style))
+        
+        # AI Summaries Section
+        story.append(Paragraph("AI Model Summaries", section_heading))
+        if report_data.get('summary_3'):
+            story.append(Paragraph("<b>Summary from Gemini:</b>", body_style))
+            story.append(Paragraph(report_data['summary_3'].replace('\n', '<br/>'), body_style))
+            story.append(Spacer(1, 4))
+            
+        if report_data.get('summary_2'):
+            story.append(Paragraph("<b>Summary from Groq AI:</b>", body_style))
+            story.append(Paragraph(report_data['summary_2'].replace('\n', '<br/>'), body_style))
+            story.append(Spacer(1, 4))
+
+        # Speaker Diarization
+        if report_data.get('diarization'):
+            story.append(Paragraph("Speaker Diarization", section_heading))
+            story.append(Paragraph(report_data['diarization'].replace('\n', '<br/>'), body_style))
+
+        # Sentiment Analysis
+        story.append(Paragraph("Sentiment Analysis", section_heading))
+        sentiment_val = report_data.get('sentiment', 'Positive')
+        story.append(Paragraph(f"Overall Sentiment: <b>{sentiment_val}</b>", body_style))
+
+        # Build PDF
+        doc.build(story)
         pdf_buffer.seek(0)
         b64_pdf = base64.b64encode(pdf_buffer.read()).decode('utf-8')
 
         return f'<a href="data:application/pdf;base64,{b64_pdf}" download="meeting_report.pdf">Download Report as PDF</a>'
-    
+
     except Exception as e:
-        st.warning(f"An error occurred while generating the full PDF report: {e}")
+        st.warning(f"PDF Generation Error: {e}")
+        return ""
         
-        fallback_content = f"""
-            <html>
-            <head><style>body {{ font-family: 'Trebuchet MS', Arial, sans-serif; }}</style></head>
-            <body>
-                <h1>Simplified Varta-Saar Meeting Report</h1>
-                <h2>Consolidated Summary</h2>
-                <pre>{clean_text(report_data.get('consolidated_summary', ''))}</pre>
-            </body>
-            </html>
-        """
-
-        fallback_buffer = io.BytesIO()
-        pisa.CreatePDF(fallback_content, dest=fallback_buffer)
-        fallback_buffer.seek(0)
-        b64_pdf_fallback = base64.b64encode(fallback_buffer.read()).decode('utf-8')
-
-        return f'<a href="data:application/pdf;base64,{b64_pdf_fallback}" download="meeting_report_simplified.pdf">Download Simplified Report as PDF</a>'
-
 def transcribe_audio(audio_url):
     """
     Sends an audio URL for transcription with language detection enabled.
