@@ -10,3 +10,5 @@ bertopic
 groq
 deno
 ffmpeg
+youtube-transcript-api
+pytubefix
