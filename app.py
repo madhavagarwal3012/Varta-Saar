@@ -468,6 +468,21 @@ def run_full_pipeline(file_path, meeting_topic):
                 summary_2 = get_summary_model_2(raw_transcript)
                 summary_3 = get_summary_model_3(raw_transcript)
                 summary_groq = get_summary_model_groq(raw_transcript)
+                
+            # --- DEBUGGING SNIPPET ---
+            st.write("DEBUG - API Key Status Check:", {
+                "Perplexity Key Loaded": bool(PERPLEXITY_API_KEY),
+                "OpenAI Key Loaded": bool(OPENAI_API_KEY),
+                "Gemini Key Loaded": bool(GEMINI_API_KEY),
+                "Groq Key Loaded": bool(GROQ_API_KEY)
+            })
+            st.write("DEBUG - Model Raw Outputs:", {
+                "Summary 1 (Perplexity)": summary_1,
+                "Summary 2 (OpenAI)": summary_2,
+                "Summary 3 (Gemini)": summary_3,
+                "Summary Groq": summary_groq
+            })
+            # ---------------------------
             
             st.success("Summaries generated!")
             st.markdown("### Consolidated Summary")
