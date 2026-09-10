@@ -230,15 +230,18 @@ def format_time(ms):
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
 def clean_for_reportlab(text):
-    """Deeply sanitizes markdown symbols and converts bullet elements to clean flowables."""
+    """Deeply sanitizes markdown symbols and fixes XML/HTML break tags for ReportLab."""
     if not text:
         return ""
-    # Remove markdown headers and stray triple/double asterisks
+    # Strip markdown headers and stray triple/double asterisks
     text = re.sub(r'#{1,6}\s*', '', text)
     text = re.sub(r'\*{3}', '', text)
     
     # Clean up bullet list formatting for ReportLab compatibility
     text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
+    
+    # Force all variations of break tags to be strictly self-closing <br/>
+    text = re.sub(r'<br\s*/?>', '<br/>', text, flags=re.IGNORECASE)
     
     # Replace broken control characters
     text = text.replace('\ufffd', '-').replace('■', ' ')
