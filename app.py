@@ -7,11 +7,12 @@ import tempfile
 import json
 import base64
 import re
-from pathlib import Path
+import google.api_core.exceptions
 import requests
 import yt_dlp
 import subprocess
 import shutil
+from pathlib import Path
 from openai import OpenAI
 from groq import Groq 
 from bertopic import BERTopic
@@ -260,21 +261,33 @@ try:
 except Exception:
     pass
 
+def fallback_regex_cleaner(text):
+    """Clean markdown artifacts using pure Python if all AI APIs hit quota limits."""
+    if not text:
+        return ""
+    # Strip markdown headers (### Header)
+    text = re.sub(r'#{1,6}\s*', '', text)
+    # Strip double and triple asterisks
+    text = re.sub(r'\*{2,3}', '', text)
+    # Ensure uniform bullet points
+    text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
+    # Fix HTML break tags for ReportLab compatibility
+    text = re.sub(r'<br\s*/?>', '<br/>', text, flags=re.IGNORECASE)
+    return text.strip()
 
 def format_summary_with_llm(raw_text):
-    """Uses Groq or Gemini free tier to format text cleanly for PDF insertion."""
+    """Uses Groq or Gemini to format text, with automatic regex fallback if quotas are hit."""
     if not raw_text:
         return ""
     
     prompt = (
-        "Clean and format the following text for a professional report. "
-        "Remove any markdown code blocks, broken tables, HTML tags, and stray asterisks. "
-        "Use clean text and standard bullet points (•) where necessary. "
-        "Keep it structured, readable, and professional:\n\n" + raw_text
+        "Clean and format the following text for a PDF report. "
+        "Remove raw markdown tables, HTML tags, and stray asterisks. "
+        "Return plain text formatted with clear bullets (•):\n\n" + raw_text
     )
     
-    # Try Groq first if available, otherwise fallback to Gemini
-    if groq_client:
+    # 1. Try Groq First (Generous Free Quota)
+    if 'groq_client' in globals() and groq_client:
         try:
             res = groq_client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -283,17 +296,19 @@ def format_summary_with_llm(raw_text):
             )
             return res.choices[0].message.content
         except Exception:
-            pass
-            
-    if google_client:
+            pass # Fall through to Gemini
+
+    # 2. Try Gemini (Catch Quota Exhausted specifically)
+    if 'google_client' in globals() and google_client:
         try:
             model = genai.GenerativeModel("gemini-1.5-flash")
             response = model.generate_content(prompt)
             return response.text
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Gemini API Quota Exceeded/Failed: {e}. Falling back to Regex Cleaner.")
             
-    return raw_text
+    # 3. Fallback to Local Regex (Guaranteed to work offline without API limits)
+    return fallback_regex_cleaner(raw_text)
     
 def generate_pdf_report(report_data):
     try:
