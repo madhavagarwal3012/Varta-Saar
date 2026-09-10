@@ -20,8 +20,11 @@ from sklearn.feature_extraction.text import CountVectorizer
 from xhtml2pdf import pisa
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFonts
 
 # =========================================================================
 # === STEP 1: CONFIGURATION AND API CLIENT SETUP (Backend Handling) =======
@@ -238,11 +241,18 @@ def clean_for_reportlab(text):
     text = re.sub(r'#{1,6}\s*', '', text)
     return text
 
+# Register Trebuchet MS (uses Windows/Linux standard system path or clean fallback)
+try:
+    pdfmetrics.registerFont(TTFonts('TrebuchetMS', 'trebuc.ttf'))
+    pdfmetrics.registerFont(TTFonts('TrebuchetMS-Bold', 'trebucbd.ttf'))
+    FONT_NAME = 'TrebuchetMS'
+    FONT_BOLD = 'TrebuchetMS-Bold'
+except:
+    # Safe fallback if system file isn't directly bound in cloud runtime
+    FONT_NAME = 'Helvetica'
+    FONT_BOLD = 'Helvetica-Bold'
+
 def generate_pdf_report(report_data):
-    """
-    Generates a clean, beautifully formatted downloadable PDF report 
-    using native ReportLab flowables with Trebuchet MS styling.
-    """
     try:
         pdf_buffer = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -253,13 +263,12 @@ def generate_pdf_report(report_data):
         )
         story = []
         
-        # Styles using standard clean typography (Helvetica maps cleanly to system sans-serif like Trebuchet)
         styles = getSampleStyleSheet()
         
         title_style = ParagraphStyle(
             'ReportTitle',
             parent=styles['Heading1'],
-            fontName='Helvetica-Bold',
+            fontName=FONT_BOLD,
             fontSize=22,
             leading=26,
             textColor=colors.HexColor("#0f172a"),
@@ -269,7 +278,7 @@ def generate_pdf_report(report_data):
         meta_style = ParagraphStyle(
             'MetaText',
             parent=styles['Normal'],
-            fontName='Helvetica',
+            fontName=FONT_NAME,
             fontSize=10,
             leading=14,
             textColor=colors.HexColor("#475569"),
@@ -279,7 +288,7 @@ def generate_pdf_report(report_data):
         section_heading = ParagraphStyle(
             'SectionHead',
             parent=styles['Heading2'],
-            fontName='Helvetica-Bold',
+            fontName=FONT_BOLD,
             fontSize=14,
             leading=18,
             textColor=colors.HexColor("#1e293b"),
@@ -290,21 +299,19 @@ def generate_pdf_report(report_data):
         body_style = ParagraphStyle(
             'BodyClean',
             parent=styles['Normal'],
-            fontName='Helvetica',
+            fontName=FONT_NAME,
             fontSize=10,
             leading=15,
             textColor=colors.HexColor("#334155"),
             spaceAfter=8
         )
 
-        # Build Document Story Content
+        # Document Header
         story.append(Paragraph("Varta-Saar Meeting Report", title_style))
         story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
         
-        date_str = report_data.get('date', '2026-09-10')
-        topic_str = report_data.get('topic', 'General')
-        story.append(Paragraph(f"<b>Date:</b> {date_str}", meta_style))
-        story.append(Paragraph(f"<b>Meeting Topic:</b> {topic_str}", meta_style))
+        story.append(Paragraph(f"<b>Date:</b> {report_data.get('date', '2026-09-10')}", meta_style))
+        story.append(Paragraph(f"<b>Meeting Topic:</b> {report_data.get('topic', 'General')}", meta_style))
         story.append(Spacer(1, 10))
 
         # Consolidated Summary
@@ -312,8 +319,9 @@ def generate_pdf_report(report_data):
         consolidated_text = clean_for_reportlab(report_data.get('consolidated_summary', ''))
         story.append(Paragraph(consolidated_text.replace('\n', '<br/>'), body_style))
         
-        # AI Summaries Section
+        # AI Summaries Section (Both Gemini & Groq included)
         story.append(Paragraph("AI Model Summaries", section_heading))
+        
         if report_data.get('summary_3'):
             story.append(Paragraph("<b>Summary from Gemini:</b>", body_style))
             story.append(Paragraph(clean_for_reportlab(report_data['summary_3']).replace('\n', '<br/>'), body_style))
@@ -334,7 +342,6 @@ def generate_pdf_report(report_data):
         sentiment_val = report_data.get('sentiment', 'Positive')
         story.append(Paragraph(f"Overall Sentiment: <b>{sentiment_val}</b>", body_style))
 
-        # Build PDF
         doc.build(story)
         pdf_buffer.seek(0)
         b64_pdf = base64.b64encode(pdf_buffer.read()).decode('utf-8')
