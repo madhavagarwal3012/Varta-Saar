@@ -3,8 +3,7 @@ openai
 google-generativeai
 scikit-learn
 requests
-yt-dlp>=2026.0.0
+yt-dlp
 pydub
 xhtml2pdf
-torch
-torchvision
+bertopic
