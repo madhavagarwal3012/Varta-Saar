@@ -464,16 +464,16 @@ def run_full_pipeline(file_path, meeting_topic):
                 consolidated_summary_list.append(summary_2)
             if summary_3:
                 st.markdown("### Summary from Gemini")
-                st.text_area("Summary from Gemini", summary_3, height=130)
+                st.markdown(summary_3)
                 consolidated_summary_list.append(summary_3)
             if summary_groq:
                 st.markdown("### Summary from Groq AI")
-                st.text_area("Summary from Groq", summary_groq, height=130)
+                st.markdown(summary_groq)
                 consolidated_summary_list.append(summary_groq)
 
             if consolidated_summary_list:
                 consolidated_summary = "\n\n".join(consolidated_summary_list)
-                st.text_area("Final Consolidated Summary", consolidated_summary, height=250)
+                st.markdown(final_consolidated_summary)
             else:
                 consolidated_summary = "All AI models failed or were missing API keys. Please check your configurations."
                 st.error(consolidated_summary)
