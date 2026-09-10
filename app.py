@@ -155,7 +155,7 @@ def get_summary_model_3(text):
     if not google_client: return ""
     try:
         # Use standard active Gemini model endpoint
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-3.5-flash")
         response = model.generate_content(f"Summarize:\n\n{text}")
         return response.text
     except Exception as e:
@@ -166,7 +166,7 @@ def get_summary_model_groq(text):
     if not groq_client: return ""
     try:
         completion = groq_client.chat.completions.create(
-            model="llama-3.1-70b-versatile",  # Updated to stable Groq model string
+            model="llama-3.1-8b-instant",  # Updated to stable Groq model string
             messages=[{"role": "user", "content": f"Summarize:\n\n{text}"}],
             temperature=0.2
         )
