@@ -230,15 +230,18 @@ def format_time(ms):
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
 def clean_for_reportlab(text):
-    """Removes unsupported markdown syntax and cleans line breaks for ReportLab."""
+    """Deeply sanitizes markdown symbols and converts bullet elements to clean flowables."""
     if not text:
         return ""
-    # Standardize or remove malformed br tags
-    text = re.sub(r'<br\s*/?>', '<br/>', text)
-    # Strip markdown table formatting rows that break XML parsing
-    text = re.sub(r'\|.*?\|', '', text)
-    # Strip raw markdown headers
+    # Remove markdown headers and stray triple/double asterisks
     text = re.sub(r'#{1,6}\s*', '', text)
+    text = re.sub(r'\*{3}', '', text)
+    
+    # Clean up bullet list formatting for ReportLab compatibility
+    text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
+    
+    # Replace broken control characters
+    text = text.replace('\ufffd', '-').replace('■', ' ')
     return text
 
 # Register Trebuchet MS from local root directory
@@ -288,22 +291,22 @@ def generate_pdf_report(report_data):
         section_heading = ParagraphStyle(
             'SectionHead',
             parent=styles['Heading2'],
-            fontName=FONT_BOLD,
-            fontSize=14,
-            leading=18,
+            fontName=FONT_BOLD,  # Uses TrebuchetMS-Bold now
+            fontSize=13,
+            leading=17,
             textColor=colors.HexColor("#1e293b"),
-            spaceBefore=14,
-            spaceAfter=6
+            spaceBefore=12,
+            spaceAfter=4
         )
         
         body_style = ParagraphStyle(
             'BodyClean',
             parent=styles['Normal'],
-            fontName=FONT_NAME,
+            fontName=FONT_NAME,  # Uses TrebuchetMS regular
             fontSize=10,
-            leading=15,
+            leading=14,
             textColor=colors.HexColor("#334155"),
-            spaceAfter=8
+            spaceAfter=6
         )
 
         # Header Section
