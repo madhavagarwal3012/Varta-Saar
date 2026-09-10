@@ -225,6 +225,18 @@ def format_time(ms):
     minutes %= 60
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
+def clean_for_reportlab(text):
+    """Removes unsupported markdown syntax and cleans line breaks for ReportLab."""
+    if not text:
+        return ""
+    # Standardize or remove malformed br tags
+    text = re.sub(r'<br\s*/?>', '<br/>', text)
+    # Strip markdown table formatting rows that break XML parsing
+    text = re.sub(r'\|.*?\|', '', text)
+    # Strip raw markdown headers
+    text = re.sub(r'#{1,6}\s*', '', text)
+    return text
+
 def generate_pdf_report(report_data):
     """
     Generates a clean, beautifully formatted downloadable PDF report 
@@ -296,25 +308,25 @@ def generate_pdf_report(report_data):
 
         # Consolidated Summary
         story.append(Paragraph("Consolidated Summary", section_heading))
-        consolidated_text = report_data.get('consolidated_summary', 'No summary available.')
+        consolidated_text = clean_for_reportlab(report_data.get('consolidated_summary', ''))
         story.append(Paragraph(consolidated_text.replace('\n', '<br/>'), body_style))
         
         # AI Summaries Section
         story.append(Paragraph("AI Model Summaries", section_heading))
         if report_data.get('summary_3'):
             story.append(Paragraph("<b>Summary from Gemini:</b>", body_style))
-            story.append(Paragraph(report_data['summary_3'].replace('\n', '<br/>'), body_style))
+            story.append(Paragraph(clean_for_reportlab(report_data['summary_3']).replace('\n', '<br/>'), body_style))
             story.append(Spacer(1, 4))
             
         if report_data.get('summary_2'):
             story.append(Paragraph("<b>Summary from Groq AI:</b>", body_style))
-            story.append(Paragraph(report_data['summary_2'].replace('\n', '<br/>'), body_style))
+            story.append(Paragraph(clean_for_reportlab(report_data['summary_2']).replace('\n', '<br/>'), body_style))
             story.append(Spacer(1, 4))
 
         # Speaker Diarization
         if report_data.get('diarization'):
             story.append(Paragraph("Speaker Diarization", section_heading))
-            story.append(Paragraph(report_data['diarization'].replace('\n', '<br/>'), body_style))
+            story.append(Paragraph(clean_for_reportlab(report_data['diarization']).replace('\n', '<br/>'), body_style))
 
         # Sentiment Analysis
         story.append(Paragraph("Sentiment Analysis", section_heading))
