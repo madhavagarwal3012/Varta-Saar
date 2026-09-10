@@ -241,20 +241,21 @@ def clean_for_reportlab(text):
     text = re.sub(r'#{1,6}\s*', '', text)
     return text
 
+# --- Trebuchet MS Font Registration Handler ---
+FONT_NAME = 'Helvetica'
+FONT_BOLD = 'Helvetica-Bold'
+
 try:
     font_url = "https://github.com/fogAndWhisky/TestCodeRepo/raw/master/src/fonts/Trebuchet%20MS.ttf"
-    response = requests.get(font_url)
-    response.raise_for_status()
-    
-    font_buffer = io.BytesIO(response.content)
-    pdfmetrics.registerFont(TTFonts('TrebuchetMS', font_buffer))
-    
-    FONT_NAME = 'TrebuchetMS'
-    FONT_BOLD = 'TrebuchetMS' # Fallback to same face if bold variant link isn't separate
-except Exception as e:
-    # Fallback to standard Helvetica if network/font registration fails
-    FONT_NAME = 'Helvetica'
-    FONT_BOLD = 'Helvetica-Bold'
+    font_response = requests.get(font_url, timeout=10)
+    if font_response.status_code == 200:
+        font_stream = io.BytesIO(font_response.content)
+        pdfmetrics.registerFont(TTFonts('TrebuchetMS', font_stream))
+        FONT_NAME = 'TrebuchetMS'
+        FONT_BOLD = 'TrebuchetMS'
+except Exception as font_err:
+    # Safe fallback if network stream drops during server boot
+    pass
     
 def generate_pdf_report(report_data):
     try:
@@ -262,11 +263,10 @@ def generate_pdf_report(report_data):
         doc = SimpleDocTemplate(
             pdf_buffer,
             pagesize=letter,
-            rightMargin=45, leftMargin=45,
-            topMargin=45, bottomMargin=45
+            rightMargin=40, leftMargin=40,
+            topMargin=40, bottomMargin=40
         )
         story = []
-        
         styles = getSampleStyleSheet()
         
         title_style = ParagraphStyle(
@@ -310,47 +310,57 @@ def generate_pdf_report(report_data):
             spaceAfter=8
         )
 
-        # Document Header
-        story.append(Paragraph("Varta-Saar Meeting Report", title_style))
+        # Header Section
+        story.append(Paragraph("Varta-Saar Comprehensive Executive Meeting Report", title_style))
         story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#cbd5e1"), spaceAfter=10))
         
         story.append(Paragraph(f"<b>Date:</b> {report_data.get('date', '2026-09-10')}", meta_style))
-        story.append(Paragraph(f"<b>Meeting Topic:</b> {report_data.get('topic', 'General')}", meta_style))
+        story.append(Paragraph(f"<b>Meeting Topic / Context:</b> {report_data.get('topic', 'General')}", meta_style))
         story.append(Spacer(1, 10))
 
         # Consolidated Summary
-        story.append(Paragraph("Consolidated Summary", section_heading))
+        story.append(Paragraph("Consolidated Master Summary", section_heading))
         consolidated_text = clean_for_reportlab(report_data.get('consolidated_summary', ''))
         story.append(Paragraph(consolidated_text.replace('\n', '<br/>'), body_style))
         
-        # AI Summaries Section (Both Gemini & Groq included)
-        story.append(Paragraph("AI Model Summaries", section_heading))
+        # Individual Successful AI Model Summaries Section
+        story.append(Paragraph("Extensive AI Model Insights", section_heading))
         
-        if report_data.get('summary_3'):
-            story.append(Paragraph("<b>Summary from Gemini:</b>", body_style))
-            story.append(Paragraph(clean_for_reportlab(report_data['summary_3']).replace('\n', '<br/>'), body_style))
-            story.append(Spacer(1, 4))
-            
-        if report_data.get('summary_2'):
-            story.append(Paragraph("<b>Summary from Groq AI:</b>", body_style))
-            story.append(Paragraph(clean_for_reportlab(report_data['summary_2']).replace('\n', '<br/>'), body_style))
-            story.append(Spacer(1, 4))
+        if report_data.get('summary_1'):
+            story.append(Paragraph("<b>Perplexity AI Summary & Insights:</b>", body_style))
+            story.append(Paragraph(clean_for_reportlab(report_data['summary_1']).replace('\n', '<br/>'), body_style))
+            story.append(Spacer(1, 6))
 
-        # Speaker Diarization
+        if report_data.get('summary_2'):
+            story.append(Paragraph("<b>OpenAI (GPT-4o-mini) Summary:</b>", body_style))
+            story.append(Paragraph(clean_for_reportlab(report_data['summary_2']).replace('\n', '<br/>'), body_style))
+            story.append(Spacer(1, 6))
+
+        if report_data.get('summary_3'):
+            story.append(Paragraph("<b>Google Gemini Summary:</b>", body_style))
+            story.append(Paragraph(clean_for_reportlab(report_data['summary_3']).replace('\n', '<br/>'), body_style))
+            story.append(Spacer(1, 6))
+            
+        if report_data.get('summary_groq'):
+            story.append(Paragraph("<b>Groq AI Summary:</b>", body_style))
+            story.append(Paragraph(clean_for_reportlab(report_data['summary_groq']).replace('\n', '<br/>'), body_style))
+            story.append(Spacer(1, 6))
+
+        # Speaker Diarization Section
         if report_data.get('diarization'):
-            story.append(Paragraph("Speaker Diarization", section_heading))
+            story.append(Paragraph("Detailed Speaker Diarization & Transcript Logs", section_heading))
             story.append(Paragraph(clean_for_reportlab(report_data['diarization']).replace('\n', '<br/>'), body_style))
 
-        # Sentiment Analysis
-        story.append(Paragraph("Sentiment Analysis", section_heading))
+        # Sentiment Analysis Section
+        story.append(Paragraph("Sentiment Analysis & Tone Metrics", section_heading))
         sentiment_val = report_data.get('sentiment', 'Positive')
-        story.append(Paragraph(f"Overall Sentiment: <b>{sentiment_val}</b>", body_style))
+        story.append(Paragraph(f"Overall Evaluated Meeting Sentiment: <b>{sentiment_val}</b>", body_style))
 
         doc.build(story)
         pdf_buffer.seek(0)
         b64_pdf = base64.b64encode(pdf_buffer.read()).decode('utf-8')
 
-        return f'<a href="data:application/pdf;base64,{b64_pdf}" download="meeting_report.pdf">Download Report as PDF</a>'
+        return f'<a href="data:application/pdf;base64,{b64_pdf}" download="varta_saar_extensive_report.pdf" style="font-family: TrebuchetMS, sans-serif; background-color: #0f172a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">📥 Download Extensive Report as PDF</a>'
 
     except Exception as e:
         st.warning(f"PDF Generation Error: {e}")
