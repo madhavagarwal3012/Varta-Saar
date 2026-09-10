@@ -309,6 +309,91 @@ def format_summary_with_llm(raw_text):
             
     # 3. Fallback to Local Regex (Guaranteed to work offline without API limits)
     return fallback_regex_cleaner(raw_text)
+
+def create_pdf_table_from_data(headers, rows, col_widths, body_style):
+    """Converts parsed text matrix into wrapped ReportLab Table flowables."""
+    table_data = []
+    
+    # Header Row
+    header_row = [Paragraph(f"<b>{clean_for_reportlab(h)}</b>", body_style) for h in headers]
+    table_data.append(header_row)
+    
+    # Content Rows
+    for row in rows:
+        formatted_row = [Paragraph(clean_for_reportlab(cell).replace('\n', '<br/>'), body_style) for cell in row]
+        table_data.append(formatted_row)
+        
+    t = Table(table_data, colWidths=col_widths)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#94a3b8")),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    return t
+
+def append_text_or_table_to_story(story, text_block, body_style):
+    """Parses text block: if a markdown table exists, builds a Table flowable; else appends Paragraphs."""
+    if not text_block:
+        return
+        
+    lines = text_block.split('\n')
+    table_lines = []
+    in_table = False
+    
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith('|') and stripped.endswith('|'):
+            in_table = True
+            table_lines.append(stripped)
+        else:
+            if in_table:
+                # Flush the accumulated markdown table
+                parsed_table = parse_markdown_table_lines(table_lines, body_style)
+                if parsed_table:
+                    story.append(parsed_table)
+                    story.append(Spacer(1, 8))
+                table_lines = []
+                in_table = False
+            
+            cleaned_line = clean_for_reportlab(line)
+            if cleaned_line.strip():
+                story.append(Paragraph(cleaned_line, body_style))
+                
+    # Flush table if block ends with a table
+    if in_table and table_lines:
+        parsed_table = parse_markdown_table_lines(table_lines, body_style)
+        if parsed_table:
+            story.append(parsed_table)
+            story.append(Spacer(1, 8))
+
+def parse_markdown_table_lines(table_lines, body_style):
+    """Parses raw markdown table lines (| col1 | col2 |) into a ReportLab Table."""
+    rows = []
+    for line in table_lines:
+        # Ignore markdown table separator lines like |---|---|
+        if re.match(r'^\|[\s\:\-]*\|', line) or '---' in line:
+            continue
+        cells = [c.strip() for c in line.strip('|').split('|')]
+        if cells:
+            rows.append(cells)
+            
+    if not rows:
+        return None
+        
+    headers = rows[0]
+    data_rows = rows[1:] if len(rows) > 1 else []
+    
+    # Calculate column widths dynamically based on total width (530pt printable area)
+    col_count = len(headers)
+    col_width = 530 / col_count if col_count > 0 else 530
+    col_widths = [col_width] * col_count
+    
+    return create_pdf_table_from_data(headers, data_rows, col_widths, body_style)
     
 def generate_pdf_report(report_data):
     try:
@@ -373,30 +458,30 @@ def generate_pdf_report(report_data):
 
         # Consolidated Summary
         story.append(Paragraph("Consolidated Master Summary", section_heading))
-        consolidated_text = clean_for_reportlab(report_data.get('consolidated_summary', ''))
-        story.append(Paragraph(consolidated_text.replace('\n', '<br/>'), body_style))
-        
-        # Individual Successful AI Model Summaries Section
+        append_text_or_table_to_story(story, report_data.get('consolidated_summary', ''), body_style)
+        story.append(Spacer(1, 10))
+
+        # Individual AI Model Summaries
         story.append(Paragraph("Extensive AI Model Insights", section_heading))
         
         if report_data.get('summary_1'):
-            story.append(Paragraph("<b>Perplexity AI Summary & Insights:</b>", body_style))
-            story.append(Paragraph(clean_for_reportlab(report_data['summary_1']).replace('\n', '<br/>'), body_style))
+            story.append(Paragraph("Perplexity AI Summary & Insights:", section_heading))
+            append_text_or_table_to_story(story, report_data['summary_1'], body_style)
             story.append(Spacer(1, 6))
 
         if report_data.get('summary_2'):
-            story.append(Paragraph("<b>OpenAI (GPT-4o-mini) Summary:</b>", body_style))
-            story.append(Paragraph(clean_for_reportlab(report_data['summary_2']).replace('\n', '<br/>'), body_style))
+            story.append(Paragraph("OpenAI (GPT-4o-mini) Summary:", section_heading))
+            append_text_or_table_to_story(story, report_data['summary_2'], body_style)
             story.append(Spacer(1, 6))
 
         if report_data.get('summary_3'):
-            story.append(Paragraph("<b>Google Gemini Summary:</b>", body_style))
-            story.append(Paragraph(clean_for_reportlab(report_data['summary_3']).replace('\n', '<br/>'), body_style))
+            story.append(Paragraph("Google Gemini Summary:", section_heading))
+            append_text_or_table_to_story(story, report_data['summary_3'], body_style)
             story.append(Spacer(1, 6))
-            
+
         if report_data.get('summary_groq'):
-            story.append(Paragraph("<b>Groq AI Summary:</b>", body_style))
-            story.append(Paragraph(clean_for_reportlab(report_data['summary_groq']).replace('\n', '<br/>'), body_style))
+            story.append(Paragraph("Groq AI Summary:", section_heading))
+            append_text_or_table_to_story(story, report_data['summary_groq'], body_style)
             story.append(Spacer(1, 6))
 
         # Speaker Diarization Section
