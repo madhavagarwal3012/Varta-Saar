@@ -767,24 +767,32 @@ with tab_youtube:
             st.error("Please provide a valid URL and a meeting topic.")
             st.stop()
 
-        video_path = tempfile.mktemp(suffix=".mp4")
-        audio_path = None
+        audio_path = tempfile.mktemp(suffix=".mp3")
         cookies_path = None
 
         try:
             if "youtube.com" in input_url or "youtu.be" in input_url:
-                st.info("YouTube URL detected. Downloading video...")
+                st.info("YouTube URL detected. Fetching audio stream...")
 
+                # Optimized yt-dlp configuration for audio extraction & bot bypass
                 ydl_opts = {
-                    'format': 'best[height<=720]/best',
-                    'outtmpl': video_path,
+                    'format': 'bestaudio/best',  # Fetch audio stream only
+                    'outtmpl': audio_path.replace('.mp3', '') + '.%(ext)s',
                     'noplaylist': True,
-                    'ignoreerrors': True,
+                    'quiet': True,
+                    'no_warnings': True,
+                    'geo_bypass': True,
                     'extractor_args': {
                         'youtube': {
-                            'player_client': ['android', 'web']
+                            'player_client': ['ios', 'mweb', 'android'],
+                            'skip': ['dash', 'hls']
                         }
-                    }
+                    },
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }],
                 }
 
                 if cookies_file:
@@ -795,41 +803,24 @@ with tab_youtube:
 
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info_dict = ydl.extract_info(input_url, download=False)
                         ydl.download([input_url])
                 except Exception as e:
-                    st.error(f"An unexpected error occurred during download: {e}")
+                    st.error(f"yt-dlp Download Error: {e}")
                     st.stop()
-
-                if not os.path.exists(video_path) or os.path.getsize(video_path) == 0:
-                    st.error("Video download failed. This may be due to the video being private, age-restricted, or region-locked.")
-                    st.stop()
-
-                st.info("Extracting audio from the video...")
-                audio_path = tempfile.mktemp(suffix=".mp3")
-                command = [
-                    'ffmpeg',
-                    '-i', video_path,
-                    '-vn',
-                    '-q:a', '0',
-                    audio_path
-                ]
-                subprocess.run(command, check=True, capture_output=True, text=True)
 
             elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
                 st.info("Direct audio URL detected. Downloading file...")
                 response = requests.get(input_url, stream=True)
                 response.raise_for_status()
-                audio_path = tempfile.mktemp(suffix=".mp3")
                 with open(audio_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
             else:
-                st.error("Invalid URL provided.")
+                st.error("Invalid URL provided. Please enter a valid YouTube or direct audio URL.")
                 st.stop()
 
             if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
-                st.error("Download or extraction failed. Resulting audio file is empty.")
+                st.error("Download or extraction failed. The audio file could not be retrieved.")
                 st.stop()
                 
             st.info("Verifying file integrity...")
@@ -844,12 +835,12 @@ with tab_youtube:
                 st.stop()
 
         except subprocess.CalledProcessError as e:
-            st.error(f"Failed to extract audio with FFmpeg: {e.stderr}")
+            st.error(f"Failed to process audio with FFmpeg: {e.stderr}")
         except Exception as e:
             st.error(f"An unexpected error occurred: {e}")
         finally:
-            if video_path and os.path.exists(video_path):
-                os.remove(video_path)
+            if cookies_path and os.path.exists(cookies_path):
+                os.remove(cookies_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
 
