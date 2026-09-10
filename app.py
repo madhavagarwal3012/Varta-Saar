@@ -227,123 +227,67 @@ def format_time(ms):
     minutes %= 60
     return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
-def generate_pdf_report(report_data):
-    """
-    Generates a downloadable PDF report using xhtml2pdf for reliability.
-    """
-    try:
-        report_data_cleaned = {
-            "date": report_data['date'],
-            "topic": clean_text(report_data['topic']),
-            "consolidated_summary": clean_text(report_data['consolidated_summary']),
-            "summary_1": clean_text(report_data['summary_1']),
-            "summary_2": clean_text(report_data['summary_2']),
-            "summary_3": clean_text(report_data['summary_3']),
-            "summary_groq": clean_text(report_data.get('summary_groq', '')),
-            "diarization": clean_text(report_data['diarization']),
-            "sentiment": clean_text(report_data['sentiment']),
-            "topics": [{"topic": clean_text(t['topic']), "count": t['count'], "keywords": clean_text(t['keywords'])} for t in report_data['topics']]
-        }
+def generate_pdf_report(report_data, output_filename="meeting_report.pdf"):
+    # 1. Setup Document Layout with clean margins
+    doc = SimpleDocTemplate(
+        output_filename, 
+        pagesize=letter,
+        rightMargin=40, leftMargin=40,
+        topMargin=40, bottomMargin=40
+    )
+    story = []
+    
+    # 2. Typography Setup (Trebuchet MS styling with standard fallbacks)
+    styles = getSampleStyleSheet()
+    
+    # Custom Clean Styles
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold', # Fallback standard font if Trebuchet system path varies
+        fontSize=20,
+        leading=24,
+        textColor=colors.HexColor("#1e293b"),
+        spaceAfter=6
+    )
+    
+    heading_style = ParagraphStyle(
+        'SectionHeading',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=13,
+        leading=16,
+        textColor=colors.HexColor("#0f172a"),
+        spaceBefore=12,
+        spaceAfter=6
+    )
+    
+    body_style = ParagraphStyle(
+        'CleanBody',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        leading=15,
+        textColor=colors.HexColor("#334155"),
+        spaceAfter=8
+    )
 
-        pdf_content = f"""
-            <html>
-            <head>
-                <title>Meeting Report</title>
-                <style>
-                    @page {{ size: A4; margin: 2cm; }}
-                    body {{ font-family: 'Arial', sans-serif; }}
-                    h1, h2, h3 {{ color: #1a237e; }}
-                    .section {{ margin-bottom: 20px; border-left: 5px solid #3f51b5; padding-left: 15px; }}
-                    pre {{ background-color: #f5f5f5; padding: 10px; border-radius: 5px; white-space: pre-wrap; }}
-                    .summary {{ background-color: #e8eaf6; padding: 20px; border-radius: 8px; }}
-                    .sentiment {{ font-weight: bold; }}
-                    .positive {{ color: green; }}
-                    .negative {{ color: red; }}
-                    .neutral {{ color: orange; }}
-                </style>
-            </head>
-            <body>
-                <h1>Varta-Saar Meeting Report</h1>
-                <p><strong>Date:</strong> {report_data_cleaned['date']}</p>
-                <p><strong>Meeting Topic:</strong> {report_data_cleaned['topic']}</p>
+    # 3. Build Content Story
+    story.append(Paragraph("Varta-Saar Meeting Report", title_style))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#cbd5e1"), spaceAfter=12))
+    
+    # Add sections dynamically
+    story.append(Paragraph("Consolidated Summary", heading_style))
+    story.append(Paragraph(report_data.get('consolidated_summary', 'No summary available.'), body_style))
+    
+    story.append(Paragraph("AI Model Summaries", heading_style))
+    for model_name, text in report_data.get('ai_summaries', {}).items():
+        story.append(Paragraph(f"<b>{model_name}:</b>", body_style))
+        story.append(Paragraph(text, body_style))
+        story.append(Spacer(1, 4))
 
-                <div class="section summary">
-                    <h2>Consolidated Summary</h2>
-                    <pre>{report_data_cleaned['consolidated_summary']}</pre>
-                </div>
-
-                <div class="section">
-                    <h2>AI Model Summaries</h2>
-                    <h3>Summary from Perplexity</h3>
-                    <pre>{report_data_cleaned['summary_1']}</pre>
-                    <h3>Summary from OpenAI</h3>
-                    <pre>{report_data_cleaned['summary_2']}</pre>
-                    <h3>Summary from Gemini</h3>
-                    <pre>{report_data_cleaned['summary_3']}</pre>
-                    <h3>Summary from Groq AI</h3>
-                    <pre>{report_data_cleaned['summary_groq']}</pre>
-                </div>
-
-                <div class="section">
-                    <h2>Speaker Diarization</h2>
-                    <pre>{report_data_cleaned['diarization']}</pre>
-                </div>
-
-                <div class="section">
-                    <h2>Sentiment Analysis</h2>
-                    <p>Overall Sentiment: <span class="sentiment {report_data_cleaned['sentiment'].lower()}">{report_data_cleaned['sentiment']}</span></p>
-                </div>
-
-                <div class="section">
-                    <h2>Key Topics</h2>
-                    <ul>
-        """
-        for topic in report_data_cleaned['topics']:
-            pdf_content += f"<li><b>{topic['topic']}</b>: {topic['keywords']} (Documents: {topic['count']})</li>"
-
-        pdf_content += """
-                    </ul>
-                </div>
-            </body>
-            </html>
-        """
-
-        pdf_buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(
-            pdf_content,
-            dest=pdf_buffer
-        )
-
-        if pisa_status.err:
-            raise Exception("PDF generation failed.")
-
-        pdf_buffer.seek(0)
-        b64_pdf = base64.b64encode(pdf_buffer.read()).decode('utf-8')
-
-        return f'<a href="data:application/pdf;base64,{b64_pdf}" download="meeting_report.pdf">Download Report as PDF</a>'
-    except Exception as e:
-        st.warning("An error occurred while generating the full PDF report. A simplified version has been created instead.")
-
-        fallback_content = f"""
-            <html>
-            <head><title>Simplified Meeting Report</title></head>
-            <body>
-                <h1>Simplified Varta-Saar Meeting Report</h1>
-                <h2>Consolidated Summary</h2>
-                <pre>{clean_text(report_data['consolidated_summary'])}</pre>
-            </body>
-            </html>
-        """
-
-        fallback_buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(
-            fallback_content,
-            dest=fallback_buffer
-        )
-        fallback_buffer.seek(0)
-        b64_pdf_fallback = base64.b64encode(fallback_buffer.read()).decode('utf-8')
-
-        return f'<a href="data:application/pdf;base64,{b64_pdf_fallback}" download="simplified_report.pdf">Download Simplified Report as PDF</a>'
+    # 4. Build Document
+    doc.build(story)
 
 # =========================================================================
 # === STEP 3: MAIN APPLICATION PIPELINE ===================================
