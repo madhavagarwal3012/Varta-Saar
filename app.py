@@ -754,6 +754,50 @@ with tab_upload:
         finally:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
+                
+def download_youtube_audio_cobalt(url, output_path):
+    """
+    Downloads audio directly from YouTube using Cobalt API.
+    Bypasses 403 Forbidden errors on hosted cloud servers (Streamlit Cloud/AWS/GCP).
+    """
+    # Public Cobalt instances (or use your self-hosted Cobalt URL)
+    cobalt_instances = [
+        "https://api.cobalt.tools/api/json",
+        "https://cobalt.stream/api/json",
+    ]
+    
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    }
+    
+    payload = {
+        "url": url,
+        "downloadMode": "audio",
+        "audioFormat": "mp3",
+        "audioBitrate": "128"
+    }
+
+    for instance in cobalt_instances:
+        try:
+            res = requests.post(instance, json=payload, headers=headers, timeout=12)
+            if res.status_code == 200:
+                data = res.json()
+                media_url = data.get("url")
+                
+                if media_url:
+                    # Stream the MP3 stream directly to local disk
+                    audio_res = requests.get(media_url, stream=True, timeout=30)
+                    audio_res.raise_for_status()
+                    with open(output_path, "wb") as f:
+                        for chunk in audio_res.iter_content(chunk_size=16384):
+                            f.write(chunk)
+                    return True
+        except Exception:
+            continue
+            
+    return False
 
 # --- YouTube URL Tab ---
 with tab_youtube:
@@ -772,58 +816,61 @@ with tab_youtube:
 
         try:
             if "youtube.com" in input_url or "youtu.be" in input_url:
-                st.info("YouTube URL detected. Fetching audio stream...")
+                st.info("YouTube URL detected. Extracting audio stream...")
+                
+                # Attempt Primary: Cobalt API Engine
+                success = download_youtube_audio_cobalt(input_url, audio_path)
+                
+                # Attempt Secondary: Modernized yt-dlp fallback
+                if not success:
+                    st.warning("Cobalt service busy. Attempting fallback extraction via yt-dlp...")
+                    
+                    ydl_opts = {
+                        'format': 'bestaudio/best',
+                        'outtmpl': audio_path.replace('.mp3', '') + '.%(ext)s',
+                        'noplaylist': True,
+                        'quiet': True,
+                        'no_warnings': True,
+                        'geo_bypass': True,
+                        'extractor_args': {
+                            'youtube': {
+                                'player_client': ['android', 'web_creator', 'mweb'],
+                                'skip': ['dash', 'hls']
+                            }
+                        },
+                        'postprocessors': [{
+                            'key': 'FFmpegExtractAudio',
+                            'preferredcodec': 'mp3',
+                            'preferredquality': '192',
+                        }],
+                    }
 
-                # Optimized yt-dlp configuration for audio extraction & bot bypass
-                ydl_opts = {
-                    'format': 'bestaudio/best',  # Fetch audio stream only
-                    'outtmpl': audio_path.replace('.mp3', '') + '.%(ext)s',
-                    'noplaylist': True,
-                    'quiet': True,
-                    'no_warnings': True,
-                    'geo_bypass': True,
-                    'extractor_args': {
-                        'youtube': {
-                            'player_client': ['ios', 'mweb', 'android'],
-                            'skip': ['dash', 'hls']
-                        }
-                    },
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'mp3',
-                        'preferredquality': '192',
-                    }],
-                }
+                    if cookies_file:
+                        cookies_path = tempfile.mktemp(suffix=".txt")
+                        with open(cookies_path, "wb") as f:
+                            f.write(cookies_file.getbuffer())
+                        ydl_opts['cookiefile'] = cookies_path
 
-                if cookies_file:
-                    cookies_path = tempfile.mktemp(suffix=".txt")
-                    with open(cookies_path, "wb") as f:
-                        f.write(cookies_file.getbuffer())
-                    ydl_opts['cookiefile'] = cookies_path
-
-                try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([input_url])
-                except Exception as e:
-                    st.error(f"yt-dlp Download Error: {e}")
-                    st.stop()
 
             elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
                 st.info("Direct audio URL detected. Downloading file...")
-                response = requests.get(input_url, stream=True)
+                response = requests.get(input_url, stream=True, timeout=30)
                 response.raise_for_status()
                 with open(audio_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
+                    for chunk in response.iter_content(chunk_size=16384):
                         f.write(chunk)
             else:
                 st.error("Invalid URL provided. Please enter a valid YouTube or direct audio URL.")
                 st.stop()
 
+            # Verify downloaded file existence and non-zero size
             if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
                 st.error("Download or extraction failed. The audio file could not be retrieved.")
                 st.stop()
                 
-            st.info("Verifying file integrity...")
+            st.info("Verifying file integrity with FFmpeg...")
             integrity_check_command = ['ffmpeg', '-v', 'error', '-i', audio_path, '-f', 'null', '-']
             result = subprocess.run(integrity_check_command, capture_output=True, text=True)
 
@@ -843,7 +890,6 @@ with tab_youtube:
                 os.remove(cookies_path)
             if audio_path and os.path.exists(audio_path):
                 os.remove(audio_path)
-
 # =========================================================================
 # === COPYRIGHT NOTICE ====================================================
 # =========================================================================
