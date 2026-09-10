@@ -168,7 +168,7 @@ def get_summary_model_groq(text):
         return ""
     try:
         completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",  # Valid active model on Groq free tier
+            model="openai/gpt-oss-120b",  # Valid active model on Groq free tier
             messages=[
                 {"role": "system", "content": "You are an expert meeting summarizer."},
                 {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
