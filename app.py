@@ -24,7 +24,7 @@ from reportlab.platypus import Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFonts
+from reportlab.pdfbase.ttfonts import TTFont
 
 # =========================================================================
 # === STEP 1: CONFIGURATION AND API CLIENT SETUP (Backend Handling) =======
