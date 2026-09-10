@@ -163,10 +163,12 @@ def get_summary_model_3(text):
         return ""
 
 def get_summary_model_groq(text):
-    if not groq_client: return ""
+    """Generates a summary using Groq AI with the correct active model ID."""
+    if not groq_client:
+        return ""
     try:
         completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # Updated to stable Groq model string
+            model="llama-3.3-70b-versatile",  # Valid active model on Groq free tier
             messages=[
                 {"role": "system", "content": "You are an expert meeting summarizer."},
                 {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
@@ -175,7 +177,7 @@ def get_summary_model_groq(text):
         )
         return completion.choices[0].message.content
     except Exception as e:
-        st.warning(f"Groq Skipped: {e}")
+        st.warning(f"Groq API Error: {e}")
         return ""
 
 def perform_topic_modeling(docs):
