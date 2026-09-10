@@ -241,21 +241,23 @@ def clean_for_reportlab(text):
     text = re.sub(r'#{1,6}\s*', '', text)
     return text
 
-# --- Trebuchet MS Font Registration Handler ---
-FONT_NAME = 'Helvetica'
-FONT_BOLD = 'Helvetica-Bold'
-
 try:
     font_url = "https://github.com/fogAndWhisky/TestCodeRepo/raw/master/src/fonts/Trebuchet%20MS.ttf"
-    font_response = requests.get(font_url, timeout=10)
+    font_response = requests.get(font_url, timeout=15)
     if font_response.status_code == 200:
-        font_stream = io.BytesIO(font_response.content)
-        pdfmetrics.registerFont(TTFonts('TrebuchetMS', font_stream))
+        # Save to a secure temporary font file on disk
+        font_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".ttf")
+        font_tmp.write(font_response.content)
+        font_tmp.close()
+        
+        # Register using the physical file path string
+        pdfmetrics.registerFont(TTFonts('TrebuchetMS', font_tmp.name))
         FONT_NAME = 'TrebuchetMS'
         FONT_BOLD = 'TrebuchetMS'
 except Exception as font_err:
-    # Safe fallback if network stream drops during server boot
-    pass
+    # Graceful fallback if any network block or SSL issue occurs
+    FONT_NAME = 'Helvetica'
+    FONT_BOLD = 'Helvetica-Bold'
     
 def generate_pdf_report(report_data):
     try:
