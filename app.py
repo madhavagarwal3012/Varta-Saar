@@ -167,7 +167,10 @@ def get_summary_model_groq(text):
     try:
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",  # Updated to stable Groq model string
-            messages=[{"role": "user", "content": f"Summarize:\n\n{text}"}],
+            messages=[
+                {"role": "system", "content": "You are an expert meeting summarizer."},
+                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
+            ],
             temperature=0.2
         )
         return completion.choices[0].message.content
