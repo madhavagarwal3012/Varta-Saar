@@ -755,54 +755,82 @@ with tab_upload:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
                 
-def extract_youtube_audio_silent(url, output_path, cookies_path=None):
+def fetch_youtube_audio_robust(url, output_path, cookies_path=None):
     """
-    Silent multi-engine YouTube audio retriever.
-    Tries multiple public Cobalt API endpoints quietly, then falls back to 
-    an optimized yt-dlp client configuration without printing UI errors on standard retry steps.
+    Robust YouTube audio extractor for cloud deployments (Streamlit Cloud, AWS, GCP).
+    Sequentially attempts Piped API, Invidious API, and yt-dlp to bypass HTTP 403 Forbidden blocks.
     """
+    # 1. Extract YouTube Video ID
+    video_id_match = re.search(r'(?:v=|\/|embed\/|shorts\/)([0-9A-Za-z_-]{11})', url)
+    if not video_id_match:
+        return False
+    video_id = video_id_match.group(1)
+
     headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    }
-    
-    payload = {
-        "url": url,
-        "downloadMode": "audio",
-        "audioFormat": "mp3",
-        "audioBitrate": "128"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
 
-    # Engine 1: Cobalt API Multi-Endpoint Pool (Silent Attempt)
-    cobalt_endpoints = [
-        "https://api.cobalt.tools/api/json",
-        "https://co.wuk.sh/api/json",
-        "https://cobalt.stream/api/json",
+    # 2. Attempt 1: Piped API Endpoints (Bypasses IP blocks seamlessly)
+    piped_instances = [
+        "https://pipedapi.kavin.rocks",
+        "https://api.piped.private.coffee",
+        "https://pipedapi.mha.fi"
     ]
 
-    for endpoint in cobalt_endpoints:
+    for instance in piped_instances:
         try:
-            res = requests.post(endpoint, json=payload, headers=headers, timeout=10)
+            api_url = f"{instance}/streams/{video_id}"
+            res = requests.get(api_url, headers=headers, timeout=8)
             if res.status_code == 200:
                 data = res.json()
-                media_url = data.get("url")
-                
-                if media_url:
-                    audio_res = requests.get(media_url, stream=True, timeout=30)
-                    if audio_res.status_code == 200:
-                        with open(output_path, "wb") as f:
-                            for chunk in audio_res.iter_content(chunk_size=16384):
-                                f.write(chunk)
-                        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                            return True
+                audio_streams = data.get("audioStreams", [])
+                if audio_streams:
+                    best_stream = max(audio_streams, key=lambda x: x.get("bitrate", 0))
+                    stream_url = best_stream.get("url")
+                    
+                    if stream_url:
+                        audio_res = requests.get(stream_url, stream=True, timeout=30)
+                        if audio_res.status_code == 200:
+                            with open(output_path, "wb") as f:
+                                for chunk in audio_res.iter_content(chunk_size=16384):
+                                    f.write(chunk)
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                                return True
         except Exception:
-            # Continue silently to the next endpoint if one fails/times out
             continue
 
-    # Engine 2: Modernized yt-dlp (Bypasses Datacenter 403 Block)
+    # 3. Attempt 2: Invidious API Endpoints
+    invidious_instances = [
+        "https://yewtu.be",
+        "https://inv.idles.eu",
+        "https://yt.artemislena.eu"
+    ]
+
+    for instance in invidious_instances:
+        try:
+            api_url = f"{instance}/api/v1/videos/{video_id}"
+            res = requests.get(api_url, headers=headers, timeout=8)
+            if res.status_code == 200:
+                data = res.json()
+                adaptive_formats = data.get("adaptiveFormats", [])
+                audio_formats = [f for f in adaptive_formats if f.get("type", "").startswith("audio/")]
+                
+                if audio_formats:
+                    stream_url = audio_formats[0].get("url")
+                    if stream_url:
+                        audio_res = requests.get(stream_url, stream=True, timeout=30)
+                        if audio_res.status_code == 200:
+                            with open(output_path, "wb") as f:
+                                for chunk in audio_res.iter_content(chunk_size=16384):
+                                    f.write(chunk)
+                            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                                return True
+        except Exception:
+            continue
+
+    # 4. Attempt 3: yt-dlp with TV/Embedded player clients
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'ba/b',
         'outtmpl': output_path.replace('.mp3', '') + '.%(ext)s',
         'noplaylist': True,
         'quiet': True,
@@ -811,7 +839,7 @@ def extract_youtube_audio_silent(url, output_path, cookies_path=None):
         'nocheckcertificate': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['mweb', 'android', 'web_creator'],
+                'player_client': ['tv', 'tv_embedded', 'android', 'mweb'],
                 'skip': ['dash', 'hls']
             }
         },
@@ -856,11 +884,11 @@ with tab_youtube:
                     with open(cookies_path, "wb") as f:
                         f.write(cookies_file.getbuffer())
 
-                # Run extraction silently across available services
-                success = extract_youtube_audio_silent(input_url, audio_path, cookies_path)
+                # Quiet multi-provider extraction pipeline
+                success = fetch_youtube_audio_robust(input_url, audio_path, cookies_path)
 
                 if not success:
-                    st.error("Failed to retrieve audio stream. The video may be private, age-restricted, or blocked by YouTube restrictions.")
+                    st.error("Failed to retrieve audio stream. The video may be private, age-restricted, or unavailable.")
                     st.stop()
 
             elif input_url.lower().endswith(('.mp3', '.m4a', '.wav', '.ogg')):
