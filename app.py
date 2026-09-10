@@ -259,6 +259,42 @@ try:
         FONT_BOLD = 'TrebuchetMS-Bold'
 except Exception:
     pass
+
+
+def format_summary_with_llm(raw_text):
+    """Uses Groq or Gemini free tier to format text cleanly for PDF insertion."""
+    if not raw_text:
+        return ""
+    
+    prompt = (
+        "Clean and format the following text for a professional report. "
+        "Remove any markdown code blocks, broken tables, HTML tags, and stray asterisks. "
+        "Use clean text and standard bullet points (•) where necessary. "
+        "Keep it structured, readable, and professional:\n\n" + raw_text
+    )
+    
+    # Try Groq first if available, otherwise fallback to Gemini
+    if groq_client:
+        try:
+            res = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1
+            )
+            return res.choices[0].message.content
+        except Exception:
+            pass
+            
+    if google_client:
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception:
+            pass
+            
+    return raw_text
+    
 def generate_pdf_report(report_data):
     try:
         pdf_buffer = io.BytesIO()
