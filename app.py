@@ -372,14 +372,17 @@ def append_text_or_table_to_story(story, text_block, body_style):
             story.append(Spacer(1, 8))
 
 def parse_markdown_table_lines(table_lines, body_style):
-    """Parses raw markdown table lines (| col1 | col2 |) into a ReportLab Table."""
+    """Parses markdown table lines into proportional, clean ReportLab Tables."""
     rows = []
     for line in table_lines:
-        # Ignore markdown table separator lines like |---|---|
+        # Filter out markdown table separators like |---|---|
         if re.match(r'^\|[\s\:\-]*\|', line) or '---' in line:
             continue
+            
         cells = [c.strip() for c in line.strip('|').split('|')]
-        if cells:
+        
+        # Skip completely empty rows or pipe artifacts
+        if cells and any(c for c in cells):
             rows.append(cells)
             
     if not rows:
@@ -388,10 +391,17 @@ def parse_markdown_table_lines(table_lines, body_style):
     headers = rows[0]
     data_rows = rows[1:] if len(rows) > 1 else []
     
-    # Calculate column widths dynamically based on total width (530pt printable area)
+    # Define proportional column widths (total available printable width = 530)
     col_count = len(headers)
-    col_width = 530 / col_count if col_count > 0 else 530
-    col_widths = [col_width] * col_count
+    if col_count == 3:
+        # Speaker, Role, Main Points
+        col_widths = [100, 100, 330]
+    elif col_count == 2:
+        col_widths = [150, 380]
+    else:
+        # Fallback uniform distribution
+        col_width = 530 / col_count if col_count > 0 else 530
+        col_widths = [col_width] * col_count
     
     return create_pdf_table_from_data(headers, data_rows, col_widths, body_style)
     
