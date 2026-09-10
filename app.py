@@ -6,6 +6,7 @@ import time
 import tempfile
 import json
 import base64
+import re
 from pathlib import Path
 import requests
 import yt_dlp
