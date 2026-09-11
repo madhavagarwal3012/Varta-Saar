@@ -263,18 +263,17 @@ except Exception:
     pass
 
 def fallback_regex_cleaner(text):
+    """Clean markdown artifacts using pure Python if all AI APIs hit quota limits."""
     if not text:
         return ""
-    # Remove delimiter markers
-    text = re.sub(r'---+\s*NEXT MODEL SUMMARY\s*---+', '', text, flags=re.IGNORECASE)
-    # Remove HTML line breaks and formatting tags
-    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
-    text = re.sub(r'<[^>]+>', '', text)
-    # Remove conversational intro fillers
-    text = re.sub(r'^(Based on the provided text|Here is a summary|In this meeting).*?\:\s*', '', text, flags=re.IGNORECASE | re.MULTILINE)
+    # Strip markdown headers (### Header)
     text = re.sub(r'#{1,6}\s*', '', text)
+    # Strip double and triple asterisks
     text = re.sub(r'\*{2,3}', '', text)
+    # Ensure uniform bullet points
     text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
+    # Fix HTML break tags for ReportLab compatibility
+    text = re.sub(r'<br\s*/?>', '<br/>', text, flags=re.IGNORECASE)
     return text.strip()
 
 def format_summary_with_llm(raw_text):
