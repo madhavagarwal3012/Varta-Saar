@@ -136,10 +136,17 @@ def get_transcription_result(transcript_id):
             return None
         time.sleep(1)
 
+# System preference enforcement
+FORMATTING_INSTRUCTIONS = (
+    "\n\nFORMATTING RULES:\n"
+    "- DO NOT use HTML tags like <ul>, <li>, <ol>, or <br> under any circumstances.\n"
+    "- If creating bullet points within tables or text, use clean Markdown bullets ('•' or '-')."
+)
+
 def get_summary_model_1(text):
     if not PERPLEXITY_API_KEY: return ""
     headers = {"Authorization": f"Bearer {PERPLEXITY_API_KEY}", "Content-Type": "application/json"}
-    data = {"model": "sonar", "messages": [{"role": "user", "content": f"Summarize:\n\n{text}"}], "temperature": 0.2}
+    data = {"model": "sonar", "messages": [{"role": "user", "content": f"Summarize:\n\n{text}\n\n{FORMATTING_INSTRUCTIONS}"}], "temperature": 0.2}
     try:
         res = requests.post("https://api.perplexity.ai/chat/completions", headers=headers, json=data)
         res.raise_for_status()
@@ -153,7 +160,7 @@ def get_summary_model_2(text):
     try:
         completion = openai_client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": f"Summarize:\n\n{text}"}]
+            messages=[{"role": "user", "content": f"Summarize:\n\n{text}\n\n{FORMATTING_INSTRUCTIONS}"}]
         )
         return completion.choices[0].message.content
     except Exception as e:
@@ -165,7 +172,7 @@ def get_summary_model_3(text):
     try:
         # Use standard active Gemini model endpoint
         model = genai.GenerativeModel("gemini-3.5-flash")
-        response = model.generate_content(f"Summarize:\n\n{text}")
+        response = model.generate_content(f"Summarize:\n\n{text}\n\n{FORMATTING_INSTRUCTIONS}")
         return response.text
     except Exception as e:
         st.warning(f"Gemini Skipped: {e}")
@@ -176,10 +183,10 @@ def get_summary_model_groq(text):
         return ""
     try:
         completion = groq_client.chat.completions.create(
-            model="openai/gpt-oss-120b",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": "You are an expert meeting summarizer."},
-                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}. Do NOT use HTML tags (like <ul>, <li>, <br>) inside markdown tables. Use standard plain text, hyphens (-), or bullet points (•) instead."}
+                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}\n\n{FORMATTING_INSTRUCTIONS}"}
             ],
             temperature=0.2
         )
