@@ -714,29 +714,24 @@ def run_full_pipeline(file_path, meeting_topic):
             
             consolidated_summary_list = []
             if summary_1:
-                summary_1 = format_summary_with_llm(summary_1)
                 st.markdown("### Summary from Perplexity")
                 st.text_area("Summary from Perplexity", summary_1, height=130)
                 consolidated_summary_list.append(summary_1)
             if summary_2:
-                summary_2 = format_summary_with_llm(summary_2)
                 st.markdown("### Summary from OpenAI")
                 st.text_area("Summary from OpenAI", summary_2, height=130)
                 consolidated_summary_list.append(summary_2)
             if summary_3:
-                summary_3 = format_summary_with_llm(summary_3)
                 st.markdown("### Summary from Gemini")
                 st.markdown(summary_3)
                 consolidated_summary_list.append(summary_3)
             if summary_groq:
-                summary_groq = format_summary_with_llm(summary_groq)
                 st.markdown("### Summary from Groq AI")
                 st.markdown(summary_groq)
                 consolidated_summary_list.append(summary_groq)
 
             if consolidated_summary_list:
-                # consolidated_summary = "\n\n".join(consolidated_summary_list)
-                consolidated_summary = synthesize_consolidated_summary(consolidated_summary_list)
+                consolidated_summary = "\n\n".join(consolidated_summary_list)
                 st.markdown(consolidated_summary)
             else:
                 consolidated_summary = "All AI models failed or were missing API keys. Please check your configurations."
@@ -746,16 +741,19 @@ def run_full_pipeline(file_path, meeting_topic):
             st.header("Full Report 📋")
             
             cleaned_consolidated = format_summary_with_llm(consolidated_summary)
-            
+            cleaned_s1 = format_summary_with_llm(summary_1)
+            cleaned_s2 = format_summary_with_llm(summary_2)
+            cleaned_s3 = format_summary_with_llm(summary_3)
+            cleaned_groq = format_summary_with_llm(summary_groq)
             
             report_data = {
                 "date": time.strftime("%Y-%m-%d"),
                 "topic": meeting_topic,
                 "consolidated_summary": cleaned_consolidated,
-                "summary_1": summary_1,
-                "summary_2": summary_2,
-                "summary_3": summary_3,
-                "summary_groq": summary_groq,
+                "summary_1": cleaned_s1,
+                "summary_2": cleaned_s2,
+                "summary_3": cleaned_s3,
+                "summary_groq": cleaned_groq,
                 "diarization": diarization_output,
                 "sentiment": dominant_sentiment.capitalize()
             }
