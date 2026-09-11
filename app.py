@@ -136,23 +136,6 @@ def get_transcription_result(transcript_id):
             return None
         time.sleep(1)
 
-def translate_text_with_gemini(text, target_language="English"):
-    if not google_client or not text:
-        return text
-    
-    prompt = f"Translate the following text accurately into {target_language}. Maintain sentence structure:\n\n{text}"
-    
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            res = model.generate_content(prompt)
-            if res and res.text:
-                return res.text
-        except Exception:
-            continue
-    return text
-
 def get_summary_model_1(text):
     if not PERPLEXITY_API_KEY: return ""
     headers = {"Authorization": f"Bearer {PERPLEXITY_API_KEY}", "Content-Type": "application/json"}
@@ -562,6 +545,9 @@ def transcribe_audio(audio_url):
 # =========================================================================
 
 def run_full_pipeline(file_path, meeting_topic):
+    """
+    Runs the full analysis pipeline from transcription to report generation.
+    """
     st.markdown("---")
     st.header("Detailed Analysis 📊")
 
@@ -579,13 +565,19 @@ def run_full_pipeline(file_path, meeting_topic):
             detected_language = transcript_dict.get('language_code', 'en')
             st.info(f"Detected language: **{detected_language}**")
 
-            english_transcript = raw_transcript
-            if detected_language != 'en':
-                with st.spinner(f"Translating entire transcript from {detected_language} to English..."):
-                    english_transcript = translate_text_with_gemini(raw_transcript, "English")
+            if detected_language != 'en' and google_client:
+                with st.spinner(f"Translating the transcript from {detected_language} to English..."):
+                    try:
+                        translation_response = google_client.generate_content(
+                            f"Translate the following text into English:\n\n{raw_transcript}"
+                        )
+                        raw_transcript = translation_response.text
+                        st.success("Translation complete!")
+                    except Exception as e:
+                        st.warning(f"Translation failed: {e}. Proceeding with original transcript.")
 
             if not raw_transcript or len(raw_transcript.strip()) == 0:
-                st.error("The transcription failed or returned an empty transcript.")
+                st.error("The transcription failed or returned an empty transcript. Please check your API key and try a video with clear speech.")
                 return 
 
             diarization_output = ""
@@ -593,12 +585,21 @@ def run_full_pipeline(file_path, meeting_topic):
             if utterances_list:
                 for utterance in utterances_list:
                     start_time = format_time(utterance.get('start', 0))
-                    diarization_output += f"[{start_time}] Speaker {utterance['speaker']}: {utterance['text']}\n"
+                    translated_text = utterance['text']
+                    if detected_language != 'en' and google_client:
+                        try:
+                            translated_text = google_client.generate_content(
+                                f"Translate the following into English:\n\n{utterance['text']}"
+                            ).text
+                        except Exception:
+                            pass
+                    diarization_output += f"[{start_time}] Speaker {utterance['speaker']}: {translated_text}\n"
                 st.markdown("### Speaker Diarization")
                 st.text_area("Transcript with Speakers", diarization_output, height=200)
             else:
+                st.warning("No speaker diarization data was returned by the transcription service.")
                 diarization_output = "No speaker data available."
-
+            
             if 'sentiment_analysis_results' in transcript_dict and transcript_dict['sentiment_analysis_results']:
                 sentiment_counts = {}
                 for sentiment in transcript_dict['sentiment_analysis_results']:
@@ -612,33 +613,41 @@ def run_full_pipeline(file_path, meeting_topic):
                 dominant_sentiment = "Not available"
 
             st.markdown("### Key Topics (powered by Topic Modeling)")
-            if utterances_list:
-                docs_for_topic_modeling = [u['text'] for u in utterances_list]
-                try:
-                    topics = perform_topic_modeling(docs_for_topic_modeling)
-                    st.json(topics)
-                except Exception:
-                    topics = [{"topic": "Topic modeling failed", "count": 0, "keywords": ""}]
+            utterances_for_topics = transcript_dict.get('utterances')
+
+            if utterances_for_topics:
+                docs_for_topic_modeling = [utterance['text'] for utterance in utterances_for_topics]
+                if docs_for_topic_modeling:
+                    try:
+                        topics = perform_topic_modeling(docs_for_topic_modeling)
+                        st.json(topics)
+                    except Exception as e:
+                        st.warning("Topic modeling could not be completed.")
+                        topics = [{"topic": "Topic modeling failed", "count": 0, "keywords": ""}]
+                else:
+                    topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
             else:
                 topics = [{"topic": "Not enough data for topic modeling", "count": 0, "keywords": ""}]
 
             st.subheader("2. AI-Powered Summaries")
-            with st.spinner("Generating summaries across frontier AI models..."):
-                summary_1 = get_summary_model_1(english_transcript)
-                summary_2 = get_summary_model_2(english_transcript)
-                summary_3 = get_summary_model_3(english_transcript)
-                summary_groq = get_summary_model_groq(english_transcript)
-
+            with st.spinner("Generating summaries with multiple AI models... (including Groq)"):
+                summary_1 = get_summary_model_1(raw_transcript)
+                summary_2 = get_summary_model_2(raw_transcript)
+                summary_3 = get_summary_model_3(raw_transcript)
+                summary_groq = get_summary_model_groq(raw_transcript)
+    
+            
             st.success("Summaries generated!")
+            st.markdown("### Consolidated Summary")
             
             consolidated_summary_list = []
             if summary_1:
                 st.markdown("### Summary from Perplexity")
-                st.markdown(summary_1)
+                st.text_area("Summary from Perplexity", summary_1, height=130)
                 consolidated_summary_list.append(summary_1)
             if summary_2:
                 st.markdown("### Summary from OpenAI")
-                st.markdown(summary_2)
+                st.text_area("Summary from OpenAI", summary_2, height=130)
                 consolidated_summary_list.append(summary_2)
             if summary_3:
                 st.markdown("### Summary from Gemini")
@@ -649,19 +658,30 @@ def run_full_pipeline(file_path, meeting_topic):
                 st.markdown(summary_groq)
                 consolidated_summary_list.append(summary_groq)
 
-            consolidated_summary = "\n\n".join(consolidated_summary_list) if consolidated_summary_list else "No summaries available."
+            if consolidated_summary_list:
+                consolidated_summary = "\n\n".join(consolidated_summary_list)
+                st.markdown(consolidated_summary)
+            else:
+                consolidated_summary = "All AI models failed or were missing API keys. Please check your configurations."
+                st.error(consolidated_summary)
 
             st.markdown("---")
             st.header("Full Report 📋")
             
+            cleaned_consolidated = format_summary_with_llm(consolidated_summary)
+            cleaned_s1 = format_summary_with_llm(summary_1)
+            cleaned_s2 = format_summary_with_llm(summary_2)
+            cleaned_s3 = format_summary_with_llm(summary_3)
+            cleaned_groq = format_summary_with_llm(summary_groq)
+            
             report_data = {
                 "date": time.strftime("%Y-%m-%d"),
                 "topic": meeting_topic,
-                "consolidated_summary": format_summary_with_llm(consolidated_summary),
-                "summary_1": format_summary_with_llm(summary_1),
-                "summary_2": format_summary_with_llm(summary_2),
-                "summary_3": format_summary_with_llm(summary_3),
-                "summary_groq": format_summary_with_llm(summary_groq),
+                "consolidated_summary": cleaned_consolidated,
+                "summary_1": cleaned_s1,
+                "summary_2": cleaned_s2,
+                "summary_3": cleaned_s3,
+                "summary_groq": cleaned_groq,
                 "diarization": diarization_output,
                 "sentiment": dominant_sentiment.capitalize()
             }
@@ -669,9 +689,17 @@ def run_full_pipeline(file_path, meeting_topic):
             st.markdown(generate_pdf_report(report_data), unsafe_allow_html=True)
         else:
             st.error("Transcription failed to return a valid result.")
+            return None
             
+    except requests.exceptions.HTTPError as e:
+        st.error(f"Failed to transcribe audio: HTTP Error {e.response.status_code}")
+        return None
+    except requests.exceptions.ConnectionError as e:
+        st.error("A network connection issue occurred during transcription.")
+        return None
     except Exception as e:
         st.error(f"An unexpected error occurred during transcription: {e}")
+        return None
 
 # =========================================================================
 # === STEP 4: STREAMLIT UI AND LOGIC ======================================
