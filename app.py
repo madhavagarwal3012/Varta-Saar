@@ -273,7 +273,17 @@ def fallback_regex_cleaner(text):
     # Ensure uniform bullet points
     text = re.sub(r'^\s*[\*\-]\s+', '• ', text, flags=re.MULTILINE)
     # Fix HTML break tags for ReportLab compatibility
-    text = re.sub(r'<br\s*/?>', '<br/>', text, flags=re.IGNORECASE)
+    text = re.sub(r'<ul[^>]*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</ul>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<li[^>]*>', ' • ', text, flags=re.IGNORECASE)
+    text = re.sub(r'</li>', '\n', text, flags=re.IGNORECASE)
+    
+    # 3. Convert HTML line breaks
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+
+    # 4. Strip any remaining unsupported HTML tags
+    text = re.sub(r'<(?!b|i|/b|/i)[^>]+>', '', text)
+    
     return text.strip()
 
 def format_summary_with_llm(raw_text):
