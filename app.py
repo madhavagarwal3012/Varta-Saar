@@ -51,7 +51,7 @@ groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    google_client = genai.GenerativeModel("gemini-1.5-flash")
+    google_client = genai.GenerativeModel("gemini-2.5-flash")
 else:
     google_client = None
 
