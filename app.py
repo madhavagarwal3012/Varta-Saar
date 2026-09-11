@@ -161,25 +161,22 @@ def get_summary_model_2(text):
         return ""
 
 def get_summary_model_3(text):
-    if not GEMINI_API_KEY: return ""
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
-    for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(f"Summarize:\n\n{text}")
-            if response and response.text:
-                return response.text
-        except Exception:
-            continue
-    st.warning("Gemini Skipped: Active Gemini model endpoint unavailable.")
-    return ""
+    if not google_client: return ""
+    try:
+        # Use standard active Gemini model endpoint
+        model = genai.GenerativeModel("gemini-3.5-flash")
+        response = model.generate_content(f"Summarize:\n\n{text}")
+        return response.text
+    except Exception as e:
+        st.warning(f"Gemini Skipped: {e}")
+        return ""
 
 def get_summary_model_groq(text):
     if not groq_client:
         return ""
     try:
         completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": "You are an expert meeting summarizer."},
                 {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
