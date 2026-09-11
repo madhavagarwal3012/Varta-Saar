@@ -27,8 +27,8 @@ Unlike single-LLM solutions, Varta-Saar processes speech through an ensemble pip
 To eliminate single-model bias and hallucinations, Varta-Saar queries an ensemble of frontier LLM models:
 * **Perplexity AI (Sonar):** Real-time web-aware context synthesis.
 * **OpenAI (GPT-4o-mini):** Precise bulleted action items and structural summaries.
-* **Google Gemini (1.5 Flash):** Deep contextual translation and long-form narrative structure.
-* **Groq (Llama-3.3-70b):** Low-latency summary formatting and validation.
+* **Google Gemini (3.5 Flash):** Deep contextual translation and long-form narrative structure.
+* **Groq (Openai/gpt-oss-120b):** Low-latency summary formatting and validation.
 
 ### 📊 3. Topic Modeling & Sentiment Metrics
 * **BERTopic Integration:** Leverages vector representations (CountVectorizer) to extract underlying themes and cluster topic keywords across discussion threads.
