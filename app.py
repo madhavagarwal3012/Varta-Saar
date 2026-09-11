@@ -140,7 +140,6 @@ def get_transcription_result(transcript_id):
 FORMATTING_INSTRUCTIONS = (
     "\n\nFORMATTING RULES:\n"
     "- DO NOT use HTML tags like <ul>, <li>, <ol>, or <br> under any circumstances.\n"
-    "- If creating bullet points within tables or text, use clean Markdown bullets ('•' or '-')."
 )
 
 def get_summary_model_1(text):
