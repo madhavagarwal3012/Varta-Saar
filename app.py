@@ -569,7 +569,7 @@ def synthesize_consolidated_summary(summary_list):
     if groq_client:
         try:
             res = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="openai/gpt-oss-120b",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1
             )
@@ -593,7 +593,7 @@ def synthesize_consolidated_summary(summary_list):
 
     # Priority 3: Gemini Synthesis
     if GEMINI_API_KEY:
-        models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+        models_to_try = ["gemini-1.5-flash", "gemini-3.5-flash", "gemini-1.5-pro", "gemini-pro"]
         for model_name in models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
@@ -721,7 +721,8 @@ def run_full_pipeline(file_path, meeting_topic):
                 consolidated_summary_list.append(summary_groq)
 
             if consolidated_summary_list:
-                consolidated_summary = "\n\n".join(consolidated_summary_list)
+                # consolidated_summary = "\n\n".join(consolidated_summary_list)
+                consolidated_summary = synthesize_consolidated_summary(consolidated_summary_list)
                 st.markdown(consolidated_summary)
             else:
                 consolidated_summary = "All AI models failed or were missing API keys. Please check your configurations."
