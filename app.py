@@ -745,13 +745,13 @@ def run_full_pipeline(file_path, meeting_topic):
             st.markdown("---")
             st.header("Full Report 📋")
             
-            consolidated_summary = format_summary_with_llm(consolidated_summary)
+            cleaned_consolidated = format_summary_with_llm(consolidated_summary)
             
             
             report_data = {
                 "date": time.strftime("%Y-%m-%d"),
                 "topic": meeting_topic,
-                "consolidated_summary": consolidated_summary,
+                "consolidated_summary": cleaned_consolidated,
                 "summary_1": summary_1,
                 "summary_2": summary_2,
                 "summary_3": summary_3,
