@@ -179,7 +179,7 @@ def get_summary_model_groq(text):
             model="openai/gpt-oss-120b",
             messages=[
                 {"role": "system", "content": "You are an expert meeting summarizer."},
-                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}"}
+                {"role": "user", "content": f"Please summarize the following meeting transcript:\n\n{text}. Do NOT use HTML tags (like <ul>, <li>, <br>) inside markdown tables. Use standard plain text, hyphens (-), or bullet points (•) instead."}
             ],
             temperature=0.2
         )
