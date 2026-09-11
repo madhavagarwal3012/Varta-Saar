@@ -555,7 +555,7 @@ def synthesize_consolidated_summary(summary_list):
     combined_raw_text = "\n\n".join(valid_summaries)
     
     prompt = (
-        "You are an executive summary synthesizer, also do not use HTML tags (like <ul>, <li>, <br>) inside markdown tables. Use standard plain text, hyphens (-), or bullet points (•) instead. Below are summaries of the same meeting from different sources:\n\n"
+        "You are an executive summary synthesizer. Below are summaries of the same meeting from different sources:\n\n"
         f"{combined_raw_text}\n\n"
         "STRICT INSTRUCTIONS:\n"
         "1. Write ONE unified, cohesive summary that merges all unique insights.\n"
